@@ -1,0 +1,4 @@
+gbots
+.zed/
+.zig-cache/
+zig-out/
