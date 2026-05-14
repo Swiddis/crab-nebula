@@ -1,5 +1,7 @@
 data/
 gbots
+__pycache__/
+.venv/
 .zed/
 .zig-cache/
 zig-out/
