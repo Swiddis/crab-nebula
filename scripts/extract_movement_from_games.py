@@ -13,9 +13,9 @@ RECORDS = pathlib.Path("data/fleet_movements.json")
 
 def make_record(gid: UUID, t: float, fleet: Item, source: Item, target: Item):
     return {
-        "gid": str(gid),
-        "t": t,
-        "fleet_id": fleet.n,
+        "game_id": str(gid),
+        "fleet_id": str(fleet.entity_id),
+        "t": round(t, 4),
         "fleet_ships": fleet.ships,
         "fleet_x": fleet.x,
         "fleet_y": fleet.y,
@@ -26,40 +26,37 @@ def make_record(gid: UUID, t: float, fleet: Item, source: Item, target: Item):
         "target_x": target.x,
         "target_y": target.y,
         "target_r": target.radius,
-        "source_target_dist": math.hypot(source.x - target.x, source.y - target.y),
+        "source_target_dist": round(
+            math.hypot(source.x - target.x, source.y - target.y), 4
+        ),
     }
 
 
-def load_records(g: Galaxy, records: list[dict]):
+def current_tick_records(g: Galaxy):
     fleets = [f for f in g.items.values() if f.type == "fleet"]
     for fleet in fleets:
         source, target = g.items[fleet.source], g.items[fleet.target]
-        records.append(make_record(g.game_id, g.t, fleet, source, target))
+        yield make_record(g.game_id, g.t, fleet, source, target)
 
 
-def flush(records: list[dict]):
-    with open(RECORDS, "a") as fp:
-        for record in records:
-            json.dump(record, fp)
-            fp.write("\n")
-    records.clear()
+def load_records(galaxy, gamefile, records):
+    with open(GAMES / gamefile, "r") as fp:
+        for line in fp:
+            parse(galaxy, line)
+            if line.startswith("/TICK"):
+                records.extend(current_tick_records(galaxy))
 
 
 def main():
-    g = Galaxy()
+    galaxy = Galaxy()
     records = []
-    with open(RECORDS, "w") as fp:
-        pass  # clear
-
-    for gamefile in tqdm(os.listdir(GAMES)):
-        with open(GAMES / gamefile, "r") as fp:
-            for line in fp:
-                parse(g, line)
-                if line.startswith("/TICK"):
-                    load_records(g, records)
-        if len(records) >= 65536:
-            flush(records)
-    flush(records)
+    with open(RECORDS, "w") as recordfile:
+        for gamefile in tqdm(os.listdir(GAMES)):
+            load_records(galaxy, gamefile, records)
+            for record in records:
+                json.dump(record, recordfile)
+                recordfile.write("\n")
+            records.clear()
 
 
 if __name__ == "__main__":

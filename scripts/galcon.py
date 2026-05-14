@@ -33,9 +33,11 @@ class Item:
     y: float
     production: float
     radius: float
+    entity_id: uuid.UUID
 
     def __init__(self, **args):
         self.__dict__ = args
+        self.entity_id = uuid.uuid7()
 
 
 class Galaxy:
