@@ -222,3 +222,39 @@ pub fn parse_server_message(gpa: std.mem.Allocator, line: []u8) MessageParseErro
         return ServerMessage{ .sync = try parse_sync_command(gpa, head, &chunks) };
     }
 }
+
+pub const ClientCommand = enum { login, send, redir, surrender, tock, ping, message };
+pub const ClientMessage = union(ClientCommand) {
+    login: struct {
+        name: []const u8,
+        token: []const u8,
+    },
+    send: struct {
+        proportion: f64,
+        source: usize,
+        target: usize,
+    },
+    redir: struct {
+        source: usize,
+        target: usize,
+    },
+    surrender: void,
+    tock: void,
+    ping: []const u8,
+    message: []const u8,
+};
+
+pub fn serialize_client_message(writer: *std.Io.Writer, msg: ClientMessage) !void {
+    return switch (msg) {
+        .login => try writer.print("/LOGIN\t{s}\t{s}\n", .{ msg.login.name, msg.login.token }),
+        .send => {
+            const pct: u8 = @round(std.math.clamp(msg.send.proportion * 100.0, 1.0, 100.0));
+            try writer.print("/SEND\t{d}\t{d}\t{d}\n", .{ pct, msg.send.source, msg.send.target });
+        },
+        .redir => try writer.print("/REDIR\t{d}\t{d}\n", .{ msg.redir.source, msg.redir.target }),
+        .surrender => try writer.print("/SURRENDER\n", .{}),
+        .tock => try writer.print("/TOCK\n", .{}),
+        .ping => try writer.print("/TOCK\t{s}\n", .{msg.ping}),
+        .message => try writer.print("{s}\n", .{msg.message}),
+    };
+}
