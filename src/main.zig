@@ -3,29 +3,42 @@ const Io = std.Io;
 
 const proto = @import("proto.zig");
 
+fn engine_handle_line(gpa: std.mem.Allocator, actions: *std.Deque([]const u8), line: []u8) !void {
+    const message = proto.parse_server_message(gpa, line) catch |err| {
+        std.debug.print("parse error: {t}\n", .{err});
+        return;
+    };
+    defer message.deinit(gpa);
+
+    switch (message) {
+        .tick => try actions.pushBack(gpa, "/TOCK"),
+        else => {},
+    }
+}
+
+fn flush_actions(actions: *std.Deque([]const u8), writer: *Io.Writer) !void {
+    var needs_flush: bool = false;
+
+    while (actions.popFront()) |action| {
+        try writer.print("{s}\n", .{action});
+        needs_flush = true;
+    }
+    if (needs_flush) {
+        try writer.flush();
+    }
+}
+
 pub fn main(init: std.process.Init) !void {
-    const io = init.io;
+    var actions = try std.Deque([]const u8).initCapacity(init.gpa, 16);
 
     var stdin_buffer: [2048]u8 = undefined;
-    var stdin_file_reader: Io.File.Reader = .init(.stdin(), io, &stdin_buffer);
-    const stdin = &stdin_file_reader.interface;
+    var stdin_reader: Io.File.Reader = .init(.stdin(), init.io, &stdin_buffer);
 
     var stdout_buffer: [2048]u8 = undefined;
-    var stdout_file_writer: Io.File.Writer = .init(.stdout(), io, &stdout_buffer);
-    const stdout = &stdout_file_writer.interface;
+    var stdout_writer: Io.File.Writer = .init(.stdout(), init.io, &stdout_buffer);
 
-    while (try stdin.takeDelimiter('\n')) |line| {
-        const message = proto.parse_server_message(init.gpa, line) catch |err| {
-            std.debug.print("parse error: {t}\n", .{err});
-            continue;
-        };
-        switch (message) {
-            .tick => {
-                _ = try stdout.write("/TOCK\n");
-                try stdout.flush();
-            },
-            else => {},
-        }
-        message.deinit(init.gpa);
+    while (try stdin_reader.interface.takeDelimiter('\n')) |line| {
+        try engine_handle_line(init.gpa, &actions, line);
+        try flush_actions(&actions, &stdout_writer.interface);
     }
 }
