@@ -19,15 +19,32 @@
 # SOFTWARE.
 
 
+import uuid
+
+
 class Item:
     n: int
     type: str
+    source: int
+    target: int
+    owner: int
+    ships: float
+    x: float
+    y: float
+    production: float
+    radius: float
 
     def __init__(self, **args):
         self.__dict__ = args
 
 
 class Galaxy:
+    state: str
+    items: dict[int, Item]
+    you: int
+    t: float
+    game_id: uuid.UUID
+
     def __init__(self):
         self.reset()
 
@@ -36,10 +53,11 @@ class Galaxy:
         self.items = {}
         self.you = 0
         self.t = 0.0
+        self.game_id = uuid.uuid7()
 
 
 def parse(g, line):
-    t = line.split("\t")
+    t = line.strip().split("\t")
     if t[0][0] != "/":
         sync(g, t)
         return
