@@ -9,8 +9,11 @@ const proto = @import("proto.zig");
 fn lazyProductionSorter(context: *const proto.Planet, a: proto.Planet, b: proto.Planet) std.math.Order {
     const dist_a = math.sqrt((a.x - context.x) * (a.x - context.x) + (a.y - context.y) * (a.y - context.y));
     const dist_b = math.sqrt((b.x - context.x) * (b.x - context.x) + (b.y - context.y) * (b.y - context.y));
+    // Reduce asymptotic effects of near-zero behavior
+    const den_a = (2.0 + a.ships) * (2.0 + dist_a);
+    const den_b = (2.0 + b.ships) * (2.0 + dist_b);
 
-    return math.order(b.production / (b.ships * dist_b), a.production / (a.ships * dist_a));
+    return math.order(b.production / den_b, a.production / den_a);
 }
 
 pub const Engine = struct {
@@ -76,6 +79,7 @@ pub const Engine = struct {
         var target_queue = std.PriorityQueue(proto.Planet, *const proto.Planet, lazyProductionSorter).initContext(planet);
         defer target_queue.deinit(self.allocator);
 
+        // planet tally: find best potential targets relative to current planet
         for (self.planets.values()) |target| {
             if (target.owner == self.you) {
                 continue;
@@ -83,27 +87,31 @@ pub const Engine = struct {
             target_queue.push(self.allocator, target) catch return;
         }
 
-        var surplus_ships = planet.ships - 5.0;
+        // target-fleet surplus map
+        var tfmap = std.AutoHashMap(usize, f64).init(self.allocator);
+        defer tfmap.deinit();
+
+        // fleet tally: each fleet is counted as a delta for the ships on their target planet
         for (self.fleets.values()) |fleet| {
-            if (fleet.target != planet.id or fleet.owner == self.you) {
-                continue;
-            }
-            surplus_ships -= 1.1 * fleet.ships;
+            const fships = if (fleet.owner == self.you) fleet.ships else -fleet.ships;
+            const tam = fships + (tfmap.get(fleet.target) orelse 0.0);
+            tfmap.put(fleet.target, tam) catch return;
         }
 
-        while (target_queue.pop()) |target| {
-            if (surplus_ships <= 0.0) {
-                break;
-            }
+        var surplus = planet.ships - 0.05 * planet.production + @min(tfmap.get(planet.id) orelse 0.0, 0.0);
 
-            const to_send = 1.1 * target.ships;
-            if (surplus_ships > to_send) {
+        while (target_queue.pop()) |target| {
+            const target_net = target.ships - (tfmap.get(target.id) orelse 0.0) + 0.1 * target.production;
+            if (target_net < 1.0) {
+                continue;
+            }
+            if (surplus >= target_net) {
                 self.queue(proto.ClientMessage{ .send = .{
-                    .proportion = to_send / planet.ships,
+                    .proportion = target_net / planet.ships,
                     .source = planet.id,
                     .target = target.id,
                 } });
-                surplus_ships -= to_send;
+                surplus -= target_net;
             }
         }
     }
