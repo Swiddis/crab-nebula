@@ -63,6 +63,18 @@ pub const ServerMessage = union(ServerCommand) {
     pong: []const u8,
     print: []const u8,
     err: []const u8,
+
+    pub fn deinit(self: ServerMessage, gpa: std.mem.Allocator) void {
+        switch (self) {
+            .sync => {
+                gpa.free(self.sync);
+            },
+            .results => {
+                gpa.free(self.results);
+            },
+            else => {},
+        }
+    }
 };
 
 const ServerCommandMap = std.StaticStringMap(ServerCommand).initComptime(.{

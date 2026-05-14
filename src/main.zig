@@ -24,13 +24,8 @@ pub fn main(init: std.process.Init) !void {
                 _ = try stdout.write("/TOCK\n");
                 try stdout.flush();
             },
-            .results => {
-                init.gpa.free(message.results);
-            },
-            .sync => {
-                init.gpa.free(message.sync);
-            },
             else => {},
         }
+        message.deinit(init.gpa);
     }
 }
