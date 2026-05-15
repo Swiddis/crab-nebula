@@ -2,6 +2,7 @@ import json
 import math
 import os
 import pathlib
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from uuid import UUID
 
 from galcon import Galaxy, Item, parse
@@ -39,24 +40,24 @@ def current_tick_records(g: Galaxy):
         yield make_record(g.game_id, g.t, fleet, source, target)
 
 
-def load_records(galaxy, gamefile, records):
+def load_records(gamefile):
+    galaxy = Galaxy()
+    records = []
     with open(GAMES / gamefile, "r") as fp:
         for line in fp:
             parse(galaxy, line)
             if line.startswith("/TICK"):
                 records.extend(current_tick_records(galaxy))
+    # TODO: we should do game-level pruning here. any fleets that only exist for one tick, any fleets present at the last tick, etc.
+    return list(map(lambda r: json.dumps(r) + "\n", records))
 
 
 def main():
-    galaxy = Galaxy()
-    records = []
-    with open(RECORDS, "w") as recordfile:
-        for gamefile in tqdm(os.listdir(GAMES)):
-            load_records(galaxy, gamefile, records)
-            for record in records:
-                json.dump(record, recordfile)
-                recordfile.write("\n")
-            records.clear()
+    with ProcessPoolExecutor(max_workers=os.cpu_count()) as ppe:
+        futs = [ppe.submit(load_records, gamefile) for gamefile in os.listdir(GAMES)]
+        with open(RECORDS, "w") as recordfile:
+            for fut in tqdm(as_completed(futs), total=len(futs)):
+                recordfile.writelines(fut.result())
 
 
 if __name__ == "__main__":
