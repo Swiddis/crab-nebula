@@ -29,7 +29,7 @@ def make_record(gid: UUID, t: float, fleet: Item, source: Item, target: Item) ->
         "source_target_dist": round(
             math.hypot(source.x - target.x, source.y - target.y), 4
         ),
-        "t": round(t, 4),
+        "t_global": round(t, 4),
         "fleet_ships": fleet.ships,
         "fleet_x": fleet.x,
         "fleet_y": fleet.y,
@@ -46,12 +46,17 @@ def current_tick_records(g: Galaxy):
 
 def enrich(records: list[Record]):
     initial_sizes = defaultdict(lambda: 0.0)
+    initial_t = defaultdict(lambda: math.inf)
     for record in records:
         initial_sizes[record["fleet_id"]] = max(
             initial_sizes[record["fleet_id"]], record["fleet_ships"]
         )
+        initial_t[record["fleet_id"]] = min(
+            initial_t[record["fleet_id"]], record["t_global"]
+        )
     for record in records:
         record["fleet_size"] = initial_sizes[record["fleet_id"]]
+        record["t"] = record["t_global"] - initial_t[record["fleet_id"]]
 
 
 def prune(records: list[Record], galaxy: Galaxy):
