@@ -2,6 +2,7 @@ import json
 import math
 import os
 import pathlib
+from collections import Counter
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from uuid import UUID
 
@@ -48,8 +49,31 @@ def load_records(gamefile):
             parse(galaxy, line)
             if line.startswith("/TICK"):
                 records.extend(current_tick_records(galaxy))
-    # TODO: we should do game-level pruning here. any fleets that only exist for one tick, any fleets present at the last tick, etc.
-    return list(map(lambda r: json.dumps(r) + "\n", records))
+    # prune fleets that existed at the end of the game (can't extract complete movement data from them since they never finished)
+    survivor_fleets = set(str(i.entity_id) for i in galaxy.items.values())
+    # prune any fleets that were only around for one tick
+    ctr = Counter(rec["fleet_id"] for rec in records)
+    unique_fleets = set()
+    for id, ct in ctr.items():
+        if ct == 1:
+            unique_fleets.add(str(id))
+    # prune fleets that were redirected
+    tgts = {}
+    redir_fleets = set()
+    for rec in records:
+        if rec["fleet_id"] not in tgts:
+            tgts[rec["fleet_id"]] = (rec["target_x"], rec["target_y"])
+        elif (rec["target_x"], rec["target_y"]) != tgts[rec["fleet_id"]]:
+            redir_fleets.add(rec["fleet_id"])
+
+    prune_fleets = survivor_fleets | unique_fleets | redir_fleets
+
+    return list(
+        map(
+            lambda r: json.dumps(r) + "\n",
+            filter(lambda r: r["fleet_id"] not in prune_fleets, records),
+        )
+    )
 
 
 def main():
