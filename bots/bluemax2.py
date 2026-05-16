@@ -1,11 +1,12 @@
 from collections import defaultdict
 
+import galcon_entities as ge
 import gbotlib as gbl
 
 SEND_PROP, DELTA_PROP, HOLD_PROP, SWITCH_PROP = 0.425, 0.300, 0.200, 0.300
 
 
-def bot(galaxy):
+def bot(galaxy: ge.Galaxy):
     if galaxy.state != "play":
         return
     planets = gbl.categorize(galaxy, "planets")
@@ -15,7 +16,7 @@ def bot(galaxy):
         planets["enemy"], key=lambda p: p.production / (p.ships + 1), reverse=True
     )
 
-    ingress = defaultdict(lambda: [0, 0])
+    ingress = defaultdict(lambda: [0.0, 0.0])
     for fleet in galaxy.fleets.values():
         if fleet.owner == galaxy.you:
             ingress[fleet.target][0] += fleet.ships
