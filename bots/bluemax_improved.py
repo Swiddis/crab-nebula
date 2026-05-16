@@ -1,9 +1,14 @@
 from collections import defaultdict
+from math import hypot
 
 import galcon_entities as ge
 import gbotlib as gbl
 
-SEND_PROP, DELTA_PROP, HOLD_PROP, SWITCH_PROP = 0.425, 0.300, 0.200, 0.300
+SEND_PROP, DELTA_PROP, HOLD_PROP, SWITCH_SCALE = 0.425, 0.300, 0.200, 1.5
+
+
+def est_prod_growth(p1: ge.Planet, p2: ge.Planet):
+    return (p2.production / 50.0) * hypot(p1.x - p2.x, p1.y - p2.y) / 40.0
 
 
 def bot(galaxy: ge.Galaxy):
@@ -23,19 +28,20 @@ def bot(galaxy: ge.Galaxy):
         else:
             ingress[fleet.target][1] += fleet.ships
 
-    for planet in planets["ally"]:
-        i, s = 0, planet.ships
-        while s >= HOLD_PROP * planet.production and i < len(targets):
-            target = targets[i]
-            if (
-                ingress[target][0] - ingress[target][1]
-                > (1.0 + SWITCH_PROP) * target.ships
-            ):
-                i += 1
-                continue
+    pships = {planet.n: planet.ships for planet in planets["ally"]}
 
+    for target in targets:
+        planets["ally"].sort(key=lambda p: hypot(p.x - target.x, p.y - target.y))
+        for planet in planets["ally"]:
+            if ingress[target.n][0] - ingress[target.n][1] > (SWITCH_SCALE) * (
+                target.ships + est_prod_growth(planet, target)
+            ):
+                break
+            if pships[planet.n] < HOLD_PROP * planet.production:
+                continue
             gbl.send(f"/SEND {round(SEND_PROP * 100)} {planet.n} {target.n}")
-            i, s = i + 1, s * DELTA_PROP
+            ingress[target.n][0] += round(SEND_PROP * pships[planet.n])
+            pships[planet.n] -= round(SEND_PROP * pships[planet.n])
 
 
 if __name__ == "__main__":

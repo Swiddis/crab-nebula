@@ -141,7 +141,7 @@ def run(bot):
 
 
 # Extra helper commands that are commonly used in bots
-def categorize(galaxy, type, sep_neutral=False):
+def categorize(galaxy, type, sep_neutral=False) -> dict[str, list[gents.Planet]]:
     entities = galaxy.planets.values() if type == "planets" else galaxy.fleets.values()
     sep_neutral = False if type == "fleets" else sep_neutral
 
