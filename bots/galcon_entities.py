@@ -75,6 +75,7 @@ class Galaxy:
     users: dict[int, User]
     planets: dict[int, Planet]
     fleets: dict[int, Fleet]
+    t: float
     state: str
     you: int
 
@@ -84,6 +85,7 @@ class Galaxy:
     def reset(self):
         self.state = ""
         self.you = 0
+        self.t = 0.0
         self.users = {}
         self.planets = {}
         self.fleets = {}
