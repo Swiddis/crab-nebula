@@ -8,6 +8,8 @@ from scipy.optimize import curve_fit
 from sklearn.linear_model import Ridge
 from tqdm import tqdm
 
+SHIP_SPEED = 40.0
+
 
 def logistic(t, t0, k, L, b):
     return L / (1 + np.exp(-k * (t - t0))) + b
@@ -48,16 +50,25 @@ if __name__ == "__main__":
 
     print("Normalizing...", file=sys.stderr)
     df["frac_arrived"] = (1.0 - df["fleet_ships"] / df["fleet_size"]).clip(0.0, 1.0)
-    df["t_norm"] = df["t"] / df["source_target_dist"]
+    df["t_norm"] = SHIP_SPEED * df["t"] / df["source_target_dist"]
 
     params_df = fit_fleets(df)
 
     print("Regressing...", file=sys.stderr)
+
+    # If we just regress linearly, small fleets outnumber large fleets and break regression at the bounds.
+    # So we weigh each fleet by the relative frequency of its fleet_size
+    size_freqs = len(params_df) / params_df["fleet_size"].value_counts()
+
     features = ["source_target_dist", "source_r", "target_r", "fleet_size"]
     X = params_df[features].values
     results = []
     for param in ["t0", "k", "L", "b"]:
-        reg = Ridge().fit(X, params_df[param].values)
+        reg = Ridge().fit(
+            X,
+            params_df[param].values,
+            sample_weight=params_df["fleet_size"].map(size_freqs),
+        )
         results.append(
             {
                 "param": param,

@@ -47,16 +47,21 @@ def current_tick_records(g: Galaxy):
 def enrich(records: list[Record]):
     initial_sizes = defaultdict(lambda: 0.0)
     initial_t = defaultdict(lambda: math.inf)
+    final_t = {}
     for record in records:
-        initial_sizes[record["fleet_id"]] = max(
-            initial_sizes[record["fleet_id"]], record["fleet_ships"]
-        )
-        initial_t[record["fleet_id"]] = min(
-            initial_t[record["fleet_id"]], record["t_global"]
-        )
+        rf = record["fleet_id"]
+        initial_sizes[rf] = max(initial_sizes[rf], record["fleet_ships"])
+        initial_t[rf] = min(initial_t[rf], record["t_global"])
+        if rf not in final_t or record["t_global"] > final_t[rf]["t_global"]:
+            final_t[rf] = record
+    for frec in final_t.values():
+        frec["t_global"] += 0.2
+        frec["fleet_ships"] = 0
+        records.append(frec)
     for record in records:
-        record["fleet_size"] = initial_sizes[record["fleet_id"]]
-        record["t"] = record["t_global"] - initial_t[record["fleet_id"]]
+        rf = record["fleet_id"]
+        record["fleet_size"] = initial_sizes[rf]
+        record["t"] = record["t_global"] - initial_t[rf]
 
 
 def prune(records: list[Record], galaxy: Galaxy):
