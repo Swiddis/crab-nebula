@@ -2,7 +2,6 @@
 
 const proto = @import("proto.zig");
 const model = @import("geom_model.zig");
-const math = @import("std").math;
 
 pub const SHIP_SPEED = model.SHIP_SPEED;
 /// ships / sec
@@ -11,7 +10,7 @@ pub const PRODUCTION_RATE = 1.0 / 50.0;
 fn hypot(a: *proto.Planet, b: *proto.Planet) f64 {
     const dx = a.x - b.x;
     const dy = a.y - b.y;
-    return math.sqrt(dx * dx + dy * dy);
+    return @sqrt(dx * dx + dy * dy);
 }
 
 /// Laziest form of travel time estimation: assume ships fly directly from the center of planet A to planet B,
