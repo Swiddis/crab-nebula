@@ -4,6 +4,7 @@ const Io = std.Io;
 const Map = std.array_hash_map.Auto;
 
 const proto = @import("proto.zig");
+const geom = @import("geom.zig");
 
 /// Simple prioritizer: score = production / (ships * distance)
 fn lazyProductionSorter(context: *const proto.Planet, a: proto.Planet, b: proto.Planet) std.math.Order {
