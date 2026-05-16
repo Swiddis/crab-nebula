@@ -54,7 +54,7 @@ fn norm(t: f64, dist: f64) f64 {{
 pub fn logistic(t: f64, {plist(params)}) f64 {{
 {dot(model_params, params)}
 
-    return L / (1.0 * math.exp(-k * (norm(t, source_target_dist) - t0))) + b;
+    return L / (1.0 + math.exp(-k * (norm(t, source_target_dist) - t0))) + b;
 }}
     """
     with open("src/geom_model.zig", "w") as fp:

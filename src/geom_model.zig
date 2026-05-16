@@ -26,5 +26,5 @@ pub fn logistic(t: f64, source_target_dist: f64, source_r: f64, target_r: f64, f
     const L = source_target_dist * LM_C[2][0] + source_r * LM_C[2][1] + target_r * LM_C[2][2] + fleet_size * LM_C[2][3] + LM_I[2];
     const b = source_target_dist * LM_C[3][0] + source_r * LM_C[3][1] + target_r * LM_C[3][2] + fleet_size * LM_C[3][3] + LM_I[3];
 
-    return L / (1.0 * math.exp(-k * (norm(t, source_target_dist) - t0))) + b;
+    return L / (1.0 + math.exp(-k * (norm(t, source_target_dist) - t0))) + b;
 }
