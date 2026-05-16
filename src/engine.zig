@@ -8,8 +8,8 @@ const geom = @import("geom.zig");
 
 /// Simple prioritizer: score = production / (ships * distance)
 fn lazyProductionSorter(context: *const proto.Planet, a: proto.Planet, b: proto.Planet) std.math.Order {
-    const dist_a = math.sqrt((a.x - context.x) * (a.x - context.x) + (a.y - context.y) * (a.y - context.y));
-    const dist_b = math.sqrt((b.x - context.x) * (b.x - context.x) + (b.y - context.y) * (b.y - context.y));
+    const dist_a = geom.hypot(context, &a);
+    const dist_b = geom.hypot(context, &b);
     // Reduce asymptotic effects of near-zero behavior
     const den_a = (2.0 + a.ships) * (2.0 + dist_a);
     const den_b = (2.0 + b.ships) * (2.0 + dist_b);
@@ -19,7 +19,7 @@ fn lazyProductionSorter(context: *const proto.Planet, a: proto.Planet, b: proto.
 
 pub const Engine = struct {
     allocator: std.mem.Allocator,
-    pending_actions: std.Deque(proto.ClientMessage),
+    pending_actions: std.ArrayList(proto.ClientMessage),
     users: Map(usize, proto.User),
     planets: Map(usize, proto.Planet),
     fleets: Map(usize, proto.Fleet),
@@ -28,7 +28,7 @@ pub const Engine = struct {
     pub fn init(alloc: std.mem.Allocator) !Engine {
         return Engine{
             .allocator = alloc,
-            .pending_actions = try std.Deque(proto.ClientMessage).initCapacity(alloc, 16),
+            .pending_actions = try std.ArrayList(proto.ClientMessage).initCapacity(alloc, 8),
             .users = try Map(usize, proto.User).init(alloc, &[_]usize{}, &[_]proto.User{}),
             .planets = try Map(usize, proto.Planet).init(alloc, &[_]usize{}, &[_]proto.Planet{}),
             .fleets = try Map(usize, proto.Fleet).init(alloc, &[_]usize{}, &[_]proto.Fleet{}),
@@ -44,15 +44,14 @@ pub const Engine = struct {
     }
 
     fn reset(self: *Engine) void {
-        // deque doesn't support clear? why?
-        while (self.pending_actions.popBack()) |_| {}
+        self.pending_actions.clearRetainingCapacity();
         self.users.clearRetainingCapacity();
         self.fleets.clearRetainingCapacity();
         self.planets.clearRetainingCapacity();
     }
 
     fn queue(self: *Engine, action: proto.ClientMessage) void {
-        self.pending_actions.pushBack(self.allocator, action) catch |err| {
+        self.pending_actions.append(self.allocator, action) catch |err| {
             std.debug.print("failed to queue {t} action: {t}\n", .{ action, err });
         };
     }
@@ -150,13 +149,12 @@ pub const Engine = struct {
     }
 
     pub fn flush_actions(self: *Engine, writer: *Io.Writer) !void {
-        var writer_needs_flush: bool = false;
-
-        while (self.pending_actions.popFront()) |action| {
-            try proto.serialize_client_message(writer, action);
-            writer_needs_flush = true;
+        for (self.pending_actions.items) |action| {
+            // note: we aren't trying to recover in the case where some elements write before failure
+            try writer.print("{f}\n", .{action});
         }
-        if (writer_needs_flush) {
+        if (self.pending_actions.items.len > 0) {
+            self.pending_actions.clearRetainingCapacity();
             try writer.flush();
         }
     }

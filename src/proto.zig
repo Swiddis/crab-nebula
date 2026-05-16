@@ -242,19 +242,19 @@ pub const ClientMessage = union(ClientCommand) {
     tock: void,
     ping: []const u8,
     message: []const u8,
-};
 
-pub fn serialize_client_message(writer: *std.Io.Writer, msg: ClientMessage) !void {
-    return switch (msg) {
-        .login => try writer.print("/LOGIN\t{s}\t{s}\n", .{ msg.login.name, msg.login.token }),
-        .send => {
-            const pct: u8 = @round(std.math.clamp(msg.send.proportion * 100.0, 1.0, 100.0));
-            try writer.print("/SEND\t{d}\t{d}\t{d}\n", .{ pct, msg.send.source, msg.send.target });
-        },
-        .redir => try writer.print("/REDIR\t{d}\t{d}\n", .{ msg.redir.source, msg.redir.target }),
-        .surrender => try writer.print("/SURRENDER\n", .{}),
-        .tock => try writer.print("/TOCK\n", .{}),
-        .ping => try writer.print("/TOCK\t{s}\n", .{msg.ping}),
-        .message => try writer.print("{s}\n", .{msg.message}),
-    };
-}
+    pub fn format(self: ClientMessage, writer: *std.Io.Writer) !void {
+        switch (self) {
+            .login => try writer.print("/LOGIN\t{s}\t{s}", .{ self.login.name, self.login.token }),
+            .send => {
+                const pct: u8 = @round(std.math.clamp(self.send.proportion * 100.0, 1.0, 100.0));
+                try writer.print("/SEND\t{d}\t{d}\t{d}", .{ pct, self.send.source, self.send.target });
+            },
+            .redir => try writer.print("/REDIR\t{d}\t{d}", .{ self.redir.source, self.redir.target }),
+            .surrender => try writer.print("/SURRENDER", .{}),
+            .tock => try writer.print("/TOCK", .{}),
+            .ping => try writer.print("/TOCK\t{s}", .{self.ping}),
+            .message => try writer.print("{s}", .{self.message}),
+        }
+    }
+};

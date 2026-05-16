@@ -7,7 +7,7 @@ pub const SHIP_SPEED = model.SHIP_SPEED;
 /// ships / sec
 pub const PRODUCTION_RATE = 1.0 / 50.0;
 
-fn hypot(a: *proto.Planet, b: *proto.Planet) f64 {
+pub fn hypot(a: *const proto.Planet, b: *const proto.Planet) f64 {
     const dx = a.x - b.x;
     const dy = a.y - b.y;
     return @sqrt(dx * dx + dy * dy);
