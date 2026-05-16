@@ -5,6 +5,8 @@ const model = @import("geom_model.zig");
 const math = @import("std").math;
 
 pub const SHIP_SPEED = model.SHIP_SPEED;
+/// ships / sec
+pub const PRODUCTION_RATE = 1.0 / 50.0;
 
 fn hypot(a: *proto.Planet, b: *proto.Planet) f64 {
     const dx = a.x - b.x;

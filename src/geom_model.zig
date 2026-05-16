@@ -2,6 +2,7 @@
 
 const math = @import("std").math;
 
+/// distance units / sec
 pub const SHIP_SPEED = 40.0;
 
 /// For each [t0, k, L, b], regress against [source_target_dist, source_r, target_r, fleet_size] + intercept

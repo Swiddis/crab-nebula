@@ -36,6 +36,7 @@ if __name__ == "__main__":
 
 const math = @import("std").math;
 
+/// distance units / sec
 pub const SHIP_SPEED = 40.0;
 
 /// For each [{mp_list}], regress against [{p_list}] + intercept
