@@ -1,3 +1,4 @@
+import json
 import sys
 
 import numpy as np
@@ -51,11 +52,18 @@ if __name__ == "__main__":
 
     params_df = fit_fleets(df)
 
+    print("Regressing...", file=sys.stderr)
     features = ["source_target_dist", "source_r", "target_r", "fleet_size"]
     X = params_df[features].values
     results = []
     for param in ["t0", "k", "L", "b"]:
         reg = Ridge().fit(X, params_df[param].values)
-        results.append(f"{param}: coefs={reg.coef_}, intercept={reg.intercept_:.4f}")
+        results.append(
+            {
+                "param": param,
+                "coefs": dict(zip(features, reg.coef_)),
+                "intercept": reg.intercept_,
+            }
+        )
 
-    print("\n".join(results))
+    print(json.dumps(results, indent=2))
