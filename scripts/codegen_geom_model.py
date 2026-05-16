@@ -50,11 +50,22 @@ fn norm(t: f64, dist: f64) f64 {{
     return SHIP_SPEED * t / dist;
 }}
 
+fn unnorm(t: f64, dist: f64) f64 {{
+    return t * dist / SHIP_SPEED;
+}}
+
 /// Estimate the proportion of the fleet that's traveled from source to target at time t (relative to the fleet leaving)
 pub fn logistic(t: f64, {plist(params)}) f64 {{
 {dot(model_params, params)}
 
     return L / (1.0 + math.exp(-k * (norm(t, source_target_dist) - t0))) + b;
+}}
+
+pub fn inv_logistic(p: f64, {plist(params)}) f64 {{
+{dot(model_params, params)}
+
+    const kt = k * t0 - @log((L + b - p) / (p - b));
+    return unnorm(kt / k, source_target_dist);
 }}
     """
     with open("src/geom_model.zig", "w") as fp:

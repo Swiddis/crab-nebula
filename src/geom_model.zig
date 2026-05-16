@@ -19,6 +19,10 @@ fn norm(t: f64, dist: f64) f64 {
     return SHIP_SPEED * t / dist;
 }
 
+fn unnorm(t: f64, dist: f64) f64 {
+    return t * dist / SHIP_SPEED;
+}
+
 /// Estimate the proportion of the fleet that's traveled from source to target at time t (relative to the fleet leaving)
 pub fn logistic(t: f64, source_target_dist: f64, source_r: f64, target_r: f64, fleet_size: f64) f64 {
     const t0 = source_target_dist * LM_C[0][0] + source_r * LM_C[0][1] + target_r * LM_C[0][2] + fleet_size * LM_C[0][3] + LM_I[0];
@@ -27,4 +31,14 @@ pub fn logistic(t: f64, source_target_dist: f64, source_r: f64, target_r: f64, f
     const b = source_target_dist * LM_C[3][0] + source_r * LM_C[3][1] + target_r * LM_C[3][2] + fleet_size * LM_C[3][3] + LM_I[3];
 
     return L / (1.0 + math.exp(-k * (norm(t, source_target_dist) - t0))) + b;
+}
+
+pub fn inv_logistic(p: f64, source_target_dist: f64, source_r: f64, target_r: f64, fleet_size: f64) f64 {
+    const t0 = source_target_dist * LM_C[0][0] + source_r * LM_C[0][1] + target_r * LM_C[0][2] + fleet_size * LM_C[0][3] + LM_I[0];
+    const k = source_target_dist * LM_C[1][0] + source_r * LM_C[1][1] + target_r * LM_C[1][2] + fleet_size * LM_C[1][3] + LM_I[1];
+    const L = source_target_dist * LM_C[2][0] + source_r * LM_C[2][1] + target_r * LM_C[2][2] + fleet_size * LM_C[2][3] + LM_I[2];
+    const b = source_target_dist * LM_C[3][0] + source_r * LM_C[3][1] + target_r * LM_C[3][2] + fleet_size * LM_C[3][3] + LM_I[3];
+
+    const kt = k * t0 - @log((L + b - p) / (p - b));
+    return unnorm(kt / k, source_target_dist);
 }
