@@ -5,3 +5,5 @@ __pycache__/
 .zed/
 .zig-cache/
 zig-out/
+
+/target

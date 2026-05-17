@@ -3,7 +3,7 @@ import json
 
 def farr(fs: list[float]):
     dat = ", ".join(map(str, fs))
-    return f"[_]f64{{ {dat} }}"
+    return f"[ {dat} ]"
 
 
 def plist(ps: list[str]):
@@ -15,7 +15,7 @@ def dot(model_params, func_params):
     for i, param in enumerate(model_params):
         muls = [f"{fp} * LM_C[{i}][{j}]" for j, fp in enumerate(func_params)]
         expr = " + ".join(muls + [f"LM_I[{i}];"])
-        result.append(f"    const {param} = {expr}")
+        result.append(f"    let {param.lower()} = {expr}")
     return "\n".join(result)
 
 
@@ -32,40 +32,44 @@ if __name__ == "__main__":
     coef_rows = "\n".join([f"    {farr(cr)}," for cr in coefs])
 
     template = f"""
-// Generated file -- modify via scripts/codegen_geom_model.py
+// Generated file -- modify via scripts/codegen_geom_model.rs
 
-/// distance units / sec
-pub const SHIP_SPEED = 40.0;
+use crate::geom::SHIP_SPEED;
 
 /// For each [{mp_list}], regress against [{p_list}] + intercept
-const LM_C = [_][]f64{{
+#[rustfmt::skip]
+const LM_C: [[f64; 4]; 4] = [
 {coef_rows}
-}};
-const LM_I = {farr(intercepts)};
+];
+
+#[rustfmt::skip]
+const LM_I: [f64; 4] = {farr(intercepts)};
 
 /// Model operates on normalized travel time by speed/distance
-fn norm(t: f64, dist: f64) f64 {{
+fn norm(t: f64, dist: f64) -> f64 {{
     return SHIP_SPEED * t / dist;
 }}
 
-fn unnorm(t: f64, dist: f64) f64 {{
+fn unnorm(t: f64, dist: f64) -> f64 {{
     return t * dist / SHIP_SPEED;
 }}
 
 /// Estimate the proportion of the fleet that's traveled from source to target at time t (relative to the fleet leaving)
-pub fn logistic(t: f64, {plist(params)}) f64 {{
+#[rustfmt::skip]
+pub fn logistic(t: f64, {plist(params)}) -> f64 {{
 {dot(model_params, params)}
 
-    return L / (1.0 + @exp(-k * (norm(t, source_target_dist) - t0))) + b;
+    return l / (1.0 + (-k * (norm(t, source_target_dist) - t0)).exp()) + b;
 }}
 
-pub fn inv_logistic(p: f64, {plist(params)}) f64 {{
+#[rustfmt::skip]
+pub fn inv_logistic(p: f64, {plist(params)}) -> f64 {{
 {dot(model_params, params)}
 
-    const kt = k * t0 - @log((L + b - p) / (p - b));
+    let kt = k * t0 - ((l + b - p) / (p - b)).ln();
     return unnorm(kt / k, source_target_dist);
 }}
     """
-    with open("src/geom_model.zig", "w") as fp:
+    with open("src/geom/model.rs", "w") as fp:
         fp.write(template.strip())
         fp.write("\n")
