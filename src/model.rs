@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::proto::*;
+use crate::{geom, proto::*};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum GameState {
@@ -77,6 +77,44 @@ impl Galaxy {
             ServerMessage::Sync(items) => self.apply_syncs(&items),
             ServerMessage::Destroy(id) => _ = self.fleets.remove(&id),
             _ => {}
+        }
+    }
+
+    /// ships if e is aligned to us, otherwise -ships
+    pub fn aligned_ships(self: &Galaxy, id: usize) -> f64 {
+        if let Some(p) = self.planets.get(&id) {
+            if p.owner == self.you {
+                p.ships
+            } else {
+                -p.ships
+            }
+        } else if let Some(f) = self.fleets.get(&id) {
+            if f.owner == self.you {
+                f.ships
+            } else {
+                -f.ships
+            }
+        } else {
+            panic!("requested aligned value for nonexistent id")
+        }
+    }
+
+    pub fn aligned_production(self: &Galaxy, planet_id: usize, t: f64) -> f64 {
+        let p = self
+            .planets
+            .get(&planet_id)
+            .expect("the planet id should exist");
+        let o = self
+            .users
+            .get(&p.owner)
+            .expect("the planet's owner should exist");
+
+        if p.owner == self.you {
+            return t * geom::PRODUCTION_RATE * p.production;
+        } else if o.team == 0 {
+            return 0.0;
+        } else {
+            return -t * geom::PRODUCTION_RATE * p.production;
         }
     }
 }

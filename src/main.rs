@@ -1,5 +1,5 @@
 mod engine;
-// mod geom;
+mod geom;
 mod model;
 mod proto;
 
