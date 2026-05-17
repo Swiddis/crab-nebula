@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet, VecDeque},
-    io::{self, BufWriter, Write},
-};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use ordered_float::OrderedFloat;
 
@@ -33,7 +30,7 @@ struct Bid {
 }
 
 pub struct Engine {
-    pending_actions: VecDeque<ClientMessage>,
+    pub action_queue: VecDeque<ClientMessage>,
     g: Galaxy,
     t: f64,
 }
@@ -41,46 +38,33 @@ pub struct Engine {
 impl Engine {
     pub fn new() -> Self {
         Self {
-            pending_actions: VecDeque::new(),
+            action_queue: VecDeque::new(),
             g: Galaxy::new(),
             t: 0.0,
         }
     }
 
-    fn tock(self: &mut Engine) -> io::Result<()> {
-        self.pending_actions.push_back(ClientMessage::Tock);
-        let stdout = io::stdout();
-        let mut out = BufWriter::new(stdout.lock());
-
-        while let Some(action) = self.pending_actions.pop_front() {
-            writeln!(out, "{}", action.to_string())?;
-        }
-        out.flush()?;
-
-        Ok(())
+    fn reset(self: &mut Engine) {
+        self.t = 0.0;
+        self.g.reset();
     }
 
-    pub fn handle(self: &mut Engine, command: ServerMessage) -> io::Result<()> {
-        match command {
-            ServerMessage::Tick(t) => {
-                if self.g.state != model::GameState::Play {
-                    return Ok(());
-                }
-
-                self.go();
-                self.t += t;
-                self.tock()?;
-            }
-            ServerMessage::Reset => {
-                self.pending_actions.clear();
-                self.t = 0.0;
-                self.g.reset();
-            }
-            msg => {
-                self.g.update(msg);
-            }
+    fn go(self: &mut Engine, t: f64) {
+        if self.g.state != model::GameState::Play {
+            return;
         }
-        Ok(())
+
+        self.run_auction_tick();
+        self.action_queue.push_back(ClientMessage::Tock);
+        self.t += t;
+    }
+
+    pub fn handle(self: &mut Engine, command: ServerMessage) {
+        match command {
+            ServerMessage::Tick(t) => self.go(t),
+            ServerMessage::Reset => self.reset(),
+            msg => self.g.update(msg),
+        }
     }
 
     /// map each planet to all fleets that are approaching the planet
@@ -217,7 +201,7 @@ impl Engine {
         vec![]
     }
 
-    fn go(self: &mut Engine) {
+    fn run_auction_tick(self: &mut Engine) {
         let auctions = self.create_auctions();
         let stat_auctions = auctions.len();
 
@@ -257,16 +241,15 @@ impl Engine {
                 .planets
                 .get(&action.source)
                 .expect("bid should be for a planet that exists");
-            self.pending_actions.push_back(ClientMessage::Send {
+            self.action_queue.push_back(ClientMessage::Send {
                 proportion: action.quantity / (FUZZ_PROP * source.ships),
                 source: action.source,
                 target: action.target,
             });
         }
-        let stat_go = self.pending_actions.len();
 
         eprintln!(
-            "stats: {stat_auctions}auction, {stat_active_auctions}act, {stat_bids}bid, {stat_actions}actions, {stat_go}go"
+            "stats: {stat_auctions}auction, {stat_active_auctions}active, {stat_bids}bid, {stat_actions}actions"
         );
     }
 }
