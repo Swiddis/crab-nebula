@@ -1,9 +1,13 @@
+# any collected data related to the game
 data/
 gbots
+
+# python
 __pycache__/
 .venv/
-.zed/
-.zig-cache/
-zig-out/
 
+# ide
+.zed/
+
+# rust
 /target
