@@ -103,11 +103,11 @@ impl Galaxy {
         let p = self
             .planets
             .get(&planet_id)
-            .expect("the planet id should exist");
+            .expect("requested production for a nonexistent planet");
         let o = self
             .users
             .get(&p.owner)
-            .expect("the planet's owner should exist");
+            .expect("a planet is owned by a nonexistent owner");
 
         if p.owner == self.you {
             return t * geom::PRODUCTION_RATE * p.production;

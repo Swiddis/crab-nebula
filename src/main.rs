@@ -64,6 +64,6 @@ fn main() {
     let out_handle = start_output_thread(client_rx);
     run_engine_loop(server_rx, client_tx);
 
-    in_handle.join().expect("input thread shouldn't panic");
-    out_handle.join().expect("output thread shouldn't panic");
+    in_handle.join().expect("input thread panicked");
+    out_handle.join().expect("output thread panicked");
 }

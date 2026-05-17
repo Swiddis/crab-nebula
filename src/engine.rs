@@ -240,7 +240,7 @@ impl Engine {
                 .g
                 .planets
                 .get(&action.source)
-                .expect("bid should be for a planet that exists");
+                .expect("attempted to bid from a planet that doesn't exist");
             self.action_queue.push_back(ClientMessage::Send {
                 proportion: action.quantity / (FUZZ_PROP * source.ships),
                 source: action.source,
