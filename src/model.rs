@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{geom, proto::*};
+use crate::proto::*;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum GameState {
@@ -80,6 +80,20 @@ impl Galaxy {
         }
     }
 
+    pub fn alignment(self: &Galaxy, id: usize) -> f64 {
+        let user = self
+            .users
+            .get(&id)
+            .expect("requested alignment value for nonexistent user");
+        if user.id == self.you {
+            1.0
+        } else if user.team == 0 {
+            0.0
+        } else {
+            -1.0
+        }
+    }
+
     /// ships if e is aligned to us, otherwise -ships
     pub fn aligned_ships(self: &Galaxy, id: usize) -> f64 {
         if let Some(p) = self.planets.get(&id) {
@@ -95,26 +109,7 @@ impl Galaxy {
                 -f.ships
             }
         } else {
-            panic!("requested aligned value for nonexistent id")
-        }
-    }
-
-    pub fn aligned_production(self: &Galaxy, planet_id: usize, t: f64) -> f64 {
-        let p = self
-            .planets
-            .get(&planet_id)
-            .expect("requested production for a nonexistent planet");
-        let o = self
-            .users
-            .get(&p.owner)
-            .expect("a planet is owned by a nonexistent owner");
-
-        if p.owner == self.you {
-            return t * geom::PRODUCTION_RATE * p.production;
-        } else if o.team == 0 {
-            return 0.0;
-        } else {
-            return -t * geom::PRODUCTION_RATE * p.production;
+            panic!("requested aligned ships for nonexistent entity")
         }
     }
 }

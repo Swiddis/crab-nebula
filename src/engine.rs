@@ -8,24 +8,15 @@ use crate::{
     proto::*,
 };
 
-/// How much to pad fleets for bidding math.
-/// If we send N ships, we assume only the prop*N ships will get there in time.
-const FUZZ_PROP: f64 = 0.95;
+/// Retain this amount of a planet's production for defense
+const RETAIN_PROP: f64 = 0.1;
+/// When doing send math, base it on this proportion of ships reaching the destination
+const SEND_SURVIVAL_PROP: f64 = 0.95;
 
-// represents an instance of a goal that might be accomplished
-#[derive(Clone, Debug)]
-struct Auction<'a> {
-    expires: OrderedFloat<f64>,
-    value: OrderedFloat<f64>,
-    requires: f64,
-    target: &'a Planet,
-}
-
-#[derive(Clone, Debug)]
 struct Bid {
     source: usize,
     target: usize,
-    quantity: f64,
+    ships: f64,
     time: f64,
 }
 
@@ -54,7 +45,7 @@ impl Engine {
             return;
         }
 
-        self.run_auction_tick();
+        self.compute_tick();
         self.action_queue.push_back(ClientMessage::Tock);
         self.t += t;
     }
@@ -81,175 +72,118 @@ impl Engine {
         map
     }
 
-    fn make_auction_from<'a>(
-        self: &'a Engine,
-        planet: &'a Planet,
-        ingress: f64,
-        expiry: i32,
-    ) -> Auction<'a> {
-        const HORIZON: f64 = 30.0; // TODO: this shouldn't be static, but i'm not sure what it _should_ be
-
-        let base_ships = planet.ships + ingress;
-        let ships_at_expiry = base_ships + self.g.aligned_production(planet.id, expiry as f64);
-        let base_value = ships_at_expiry + HORIZON * PRODUCTION_RATE * planet.production;
-        let worst_case_requires = if base_ships < ships_at_expiry {
-            ships_at_expiry
-        } else {
-            base_ships
-        };
-
-        Auction {
-            expires: OrderedFloat(expiry as f64),
-            value: OrderedFloat(base_value),
-            requires: worst_case_requires,
-            target: planet,
-        }
-    }
-
-    fn create_auctions<'a>(self: &'a Engine) -> Vec<Auction<'a>> {
-        let ingress_map = self.ingress_map();
-        let mut auctions = Vec::new();
-
-        for planet in self.g.planets.values() {
-            let ingress = match ingress_map.get(&planet.id) {
-                Some(fleets) => fleets.iter().map(|f| self.g.aligned_ships(f.id)).sum(),
-                None => 0.0,
-            };
-
-            for expiry in (5..60).step_by(5) {
-                let auction = self.make_auction_from(planet, ingress, expiry);
-                if auction.value > OrderedFloat(0.0) && auction.requires > 0.0 {
-                    auctions.push(self.make_auction_from(planet, ingress, expiry))
+    /// Get a list of potential target planets with ships adjusted to how many ships are necessary to satisfy the target,
+    /// accounting for all active fleet ingress and retention.
+    /// Doesn't account for production over time for enemy planets.
+    fn get_ingress_balanced_targets(self: &Engine) -> Vec<Planet> {
+        let ingress = self.ingress_map();
+        let mut ibt: Vec<Planet> = self.g.planets.values().cloned().collect();
+        for planet in ibt.iter_mut() {
+            planet.ships = -(self.g.aligned_ships(planet.id) - RETAIN_PROP * planet.production);
+            match ingress.get(&planet.id) {
+                Some(fleets) => {
+                    planet.ships += fleets
+                        .iter()
+                        .map(|f| -self.g.aligned_ships(f.id))
+                        .sum::<f64>();
                 }
+                None => {}
             }
         }
-
-        auctions.sort_unstable_by_key(|a| (a.expires, -a.value));
-        auctions
+        ibt.retain(|p| p.ships > 0.0);
+        ibt.sort_by_key(|p| -OrderedFloat(p.production / p.ships));
+        ibt
     }
 
-    fn place_bids(self: &Engine, planet: &Planet, auctions: &Vec<Auction>) -> Vec<Bid> {
+    fn place_attack_bids(self: &mut Engine, source: &Planet, target: &Planet) -> Vec<Bid> {
         let mut bids: Vec<Bid> = Vec::new();
+        let surplus = source.ships - RETAIN_PROP * source.production;
 
-        for auction in auctions {
-            let mut prop = 0.8;
-            for _ in 0..4 {
-                let arrived = geom::estimate_arrived(
-                    auction.expires.0,
-                    prop * planet.ships,
-                    planet,
-                    auction.target,
-                );
-                if arrived < auction.requires * 0.35 {
-                    break;
-                }
-                let fleet_size = prop * planet.ships / FUZZ_PROP;
-                let eta = geom::eta(FUZZ_PROP, fleet_size, planet, auction.target);
-                bids.push(Bid {
-                    source: planet.id,
-                    target: auction.target.id,
-                    quantity: prop * planet.ships,
-                    time: eta,
-                });
-
-                prop *= 0.5;
+        const TEST_PROPS: [f64; 4] = [1.00, 0.75, 0.50, 0.25];
+        for test_prop in TEST_PROPS {
+            let to_send = test_prop * surplus;
+            let t = geom::eta(SEND_SURVIVAL_PROP, to_send, source, target);
+            let mut goal = target.ships;
+            if self.g.alignment(target.owner) < 0.0 {
+                goal += PRODUCTION_RATE * t;
             }
+
+            if to_send * SEND_SURVIVAL_PROP < goal {
+                break;
+            }
+            bids.push(Bid {
+                source: source.id,
+                target: target.id,
+                ships: to_send,
+                time: t,
+            });
         }
 
         bids
     }
 
-    /// Find the fastest set of bids that win the auction.
-    /// Returns the bids if they exist, otherwise returns empty vec
-    fn take_bids(
-        self: &Engine,
-        auction: &Auction,
-        bids: &mut Vec<Bid>,
-        seen: &HashSet<usize>,
-    ) -> Vec<Bid> {
-        let mut source_contribs: HashMap<usize, f64> = HashMap::new();
-        let mut take_idxs: HashMap<usize, usize> = HashMap::new();
-        bids.sort_by_key(|b| OrderedFloat(b.time));
-
-        for (i, bid) in bids.iter().enumerate() {
-            if seen.contains(&bid.source) {
+    /// Select best bids from the given bids to execute, according to the priority implied by the bid's sorting
+    fn execute_bids(self: &mut Engine, bids: &Vec<Bid>) {
+        let mut alloc_sources: HashMap<usize, f64> = HashMap::new();
+        let mut alloc_targets: HashSet<usize> = HashSet::new();
+        for bid in bids {
+            if alloc_targets.contains(&bid.target) {
                 continue;
             }
-
-            match source_contribs.get(&bid.source) {
-                Some(contrib) => {
-                    if bid.quantity > *contrib {
-                        _ = source_contribs.insert(bid.source, bid.quantity);
-                        _ = take_idxs.insert(bid.source, i);
-                    }
-                }
-                None => {
-                    _ = source_contribs.insert(bid.source, bid.quantity);
-                    _ = take_idxs.insert(bid.source, i);
-                }
-            }
-
-            if source_contribs.values().sum::<f64>() >= auction.value.0 {
-                let mut result = Vec::new();
-                for v in take_idxs.values() {
-                    result.push(bids[*v].clone());
-                }
-                return result;
-            }
-        }
-
-        vec![]
-    }
-
-    fn run_auction_tick(self: &mut Engine) {
-        let auctions = self.create_auctions();
-        let stat_auctions = auctions.len();
-
-        let mut bids: HashMap<usize, Vec<Bid>> = HashMap::new();
-        for planet in self.g.planets.values() {
-            if planet.owner != self.g.you {
-                continue;
-            }
-
-            let pbids = self.place_bids(planet, &auctions);
-            for pbid in pbids {
-                match bids.get_mut(&pbid.target) {
-                    Some(vec) => vec.push(pbid),
-                    None => _ = bids.insert(pbid.target, vec![pbid]),
-                }
-            }
-        }
-        let stat_active_auctions = bids.len();
-        let stat_bids: usize = bids.values().map(|b| b.len()).sum();
-
-        let mut actions: Vec<Bid> = Vec::new();
-        let mut seen: HashSet<usize> = HashSet::new();
-        for auction in auctions {
-            if let Some(bvec) = bids.get_mut(&auction.target.id) {
-                let mut go_bids = self.take_bids(&auction, bvec, &seen);
-                for gbid in go_bids.iter() {
-                    seen.insert(gbid.source);
-                }
-                actions.append(&mut go_bids);
-            }
-        }
-        let stat_actions = actions.len();
-
-        for action in actions {
             let source = self
                 .g
                 .planets
-                .get(&action.source)
-                .expect("attempted to bid from a planet that doesn't exist");
+                .get(&bid.source)
+                .expect("received bid for invalid source");
+            let remaining = match alloc_sources.get(&source.id) {
+                Some(spent) => source.ships - spent - RETAIN_PROP * source.production,
+                None => source.ships - RETAIN_PROP * source.production,
+            };
+            if remaining < bid.ships {
+                continue;
+            }
+
+            alloc_sources.insert(bid.source, bid.ships);
+            alloc_targets.insert(bid.target);
             self.action_queue.push_back(ClientMessage::Send {
-                proportion: action.quantity / (FUZZ_PROP * source.ships),
-                source: action.source,
-                target: action.target,
+                proportion: bid.ships / source.ships,
+                source: bid.source,
+                target: bid.target,
             });
         }
+    }
 
-        eprintln!(
-            "stats: {stat_auctions}auction, {stat_active_auctions}active, {stat_bids}bid, {stat_actions}actions"
-        );
+    fn compute_tick(self: &mut Engine) {
+        let targets = self.get_ingress_balanced_targets();
+        let target_indices: HashMap<usize, usize> =
+            targets.iter().enumerate().map(|(i, p)| (p.id, i)).collect();
+        let our_planets: Vec<Planet> = self
+            .g
+            .planets
+            .values()
+            .filter(|p| p.owner == self.g.you)
+            .cloned()
+            .collect();
+
+        let mut bids = Vec::new();
+        for source in our_planets.iter() {
+            if source.ships - RETAIN_PROP * source.production <= 0.0
+                || target_indices.contains_key(&source.id)
+            {
+                continue;
+            }
+            for target in targets.iter() {
+                bids.append(&mut self.place_attack_bids(source, target));
+            }
+        }
+        bids.sort_by_key(|b| {
+            (
+                target_indices
+                    .get(&b.target)
+                    .expect("received bid for invalid target"),
+                OrderedFloat(b.time),
+            )
+        });
+        self.execute_bids(&bids);
     }
 }
