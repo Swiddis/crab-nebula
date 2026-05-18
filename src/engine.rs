@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 
 use ordered_float::OrderedFloat;
 
@@ -16,7 +16,8 @@ const SEND_SURVIVAL_PROP: f64 = 0.95;
 struct Bid {
     source: usize,
     target: usize,
-    ships: f64,
+    to_send: f64,
+    clears_goal: f64,
     time: f64,
 }
 
@@ -88,7 +89,15 @@ impl Engine {
             }
         }
         ibt.retain(|p| p.ships > 0.0);
-        ibt.sort_by_key(|p| -OrderedFloat(p.production / p.ships));
+
+        ibt.sort_by_key(|p| {
+            (
+                -OrderedFloat(p.production / p.ships),
+                // ties for prod/ships generally only happens in the opening, in this case prioritize our side
+                // overall if there's a tie, we _most likely_ have more friends closer to our initial base
+                OrderedFloat(geom::hypot(p, self.g.base())),
+            )
+        });
         ibt
     }
 
@@ -105,13 +114,16 @@ impl Engine {
                 goal += PRODUCTION_RATE * t;
             }
 
-            if to_send * SEND_SURVIVAL_PROP < goal {
+            if to_send * SEND_SURVIVAL_PROP < goal / 3.0 {
+                // don't flood with bids that are unlikely to be taken
                 break;
             }
+            let arrived_at_t = geom::estimate_arrived(t, to_send, source, target);
             bids.push(Bid {
                 source: source.id,
                 target: target.id,
-                ships: to_send,
+                to_send: to_send,
+                clears_goal: arrived_at_t,
                 time: t,
             });
         }
@@ -119,34 +131,56 @@ impl Engine {
         bids
     }
 
-    /// Select best bids from the given bids to execute, according to the priority implied by the bid's sorting
-    fn execute_bids(self: &mut Engine, bids: &Vec<Bid>) {
-        let mut alloc_sources: HashMap<usize, f64> = HashMap::new();
-        let mut alloc_targets: HashSet<usize> = HashSet::new();
+    /// Select best bids from the given bids to execute, according to the priority implied by the bid's sorting.
+    /// Assumes all bids have the same target with a threshold indicated by threshold.
+    /// source_limits is updated according to the bids accepted.
+    fn take_bids(
+        self: &mut Engine,
+        target_threshold: f64,
+        bids: &Vec<Bid>,
+        source_limits: &mut HashMap<usize, f64>,
+    ) {
+        let mut take_bids: HashMap<usize, &Bid> = HashMap::new();
+        let mut clears_threshold = false;
+
         for bid in bids {
-            if alloc_targets.contains(&bid.target) {
+            if bid.to_send > *source_limits.get(&bid.source).unwrap_or(&0.0) {
                 continue;
             }
+
+            match take_bids.get(&bid.source) {
+                Some(current_bid) => {
+                    if bid.clears_goal > current_bid.clears_goal {
+                        _ = take_bids.insert(current_bid.source, bid);
+                    }
+                }
+                None => {
+                    _ = take_bids.insert(bid.source, bid);
+                }
+            }
+            if take_bids.values().map(|b| b.clears_goal).sum::<f64>() > target_threshold {
+                clears_threshold = true;
+                break;
+            }
+        }
+
+        if !clears_threshold {
+            return;
+        }
+
+        for bid in take_bids.values() {
             let source = self
                 .g
                 .planets
                 .get(&bid.source)
-                .expect("received bid for invalid source");
-            let remaining = match alloc_sources.get(&source.id) {
-                Some(spent) => source.ships - spent - RETAIN_PROP * source.production,
-                None => source.ships - RETAIN_PROP * source.production,
-            };
-            if remaining < bid.ships {
-                continue;
-            }
-
-            alloc_sources.insert(bid.source, bid.ships);
-            alloc_targets.insert(bid.target);
+                .expect("received bid from nonexistent planet");
             self.action_queue.push_back(ClientMessage::Send {
-                proportion: bid.ships / source.ships,
+                proportion: bid.to_send / source.ships,
                 source: bid.source,
                 target: bid.target,
             });
+            let prev_lim = *source_limits.get(&bid.source).unwrap_or(&0.0);
+            _ = source_limits.insert(bid.source, prev_lim - bid.to_send);
         }
     }
 
@@ -162,25 +196,27 @@ impl Engine {
             .cloned()
             .collect();
 
-        let mut bids = Vec::new();
+        let mut bids: HashMap<usize, Vec<Bid>> = HashMap::new();
+        let mut source_limits: HashMap<usize, f64> = HashMap::new();
         for source in our_planets.iter() {
-            if source.ships - RETAIN_PROP * source.production <= 0.0
-                || target_indices.contains_key(&source.id)
-            {
+            let lim = source.ships - RETAIN_PROP * source.production;
+            if lim <= 0.0 || target_indices.contains_key(&source.id) {
                 continue;
             }
+            _ = source_limits.insert(source.id, lim);
             for target in targets.iter() {
-                bids.append(&mut self.place_attack_bids(source, target));
+                match bids.get_mut(&target.id) {
+                    Some(v) => v.append(&mut self.place_attack_bids(source, target)),
+                    None => _ = bids.insert(target.id, self.place_attack_bids(source, target)),
+                }
             }
         }
-        bids.sort_by_key(|b| {
-            (
-                target_indices
-                    .get(&b.target)
-                    .expect("received bid for invalid target"),
-                OrderedFloat(b.time),
-            )
-        });
-        self.execute_bids(&bids);
+
+        for target in targets {
+            if let Some(bvec) = bids.get_mut(&target.id) {
+                bvec.sort_by_key(|b| OrderedFloat(b.time));
+                self.take_bids(target.ships, &bvec, &mut source_limits);
+            }
+        }
     }
 }

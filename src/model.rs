@@ -16,6 +16,7 @@ pub struct Galaxy {
     pub you: usize,
     pub state: GameState,
     pub speed: f64,
+    base: Option<usize>,
 }
 
 impl Galaxy {
@@ -27,6 +28,7 @@ impl Galaxy {
             you: 0,
             state: GameState::Init,
             speed: 0.0,
+            base: None,
         }
     }
 
@@ -37,14 +39,23 @@ impl Galaxy {
         self.you = 0;
         self.state = GameState::Init;
         self.speed = 0.0;
+        self.base = None;
     }
 
     fn apply_meta(self: &mut Galaxy, set_meta: SetMeta) {
         match set_meta {
             SetMeta::You(id) => self.you = id,
             SetMeta::State(state) => match state.as_str() {
-                "PLAY" => self.state = GameState::Play,
-                "DONE" => self.state = GameState::Done,
+                "PLAY" => {
+                    self.state = GameState::Play;
+                    if let Some(p) = self.planets.values().filter(|p| p.owner == self.you).next() {
+                        self.base = Some(p.id);
+                    }
+                }
+                "DONE" => {
+                    self.state = GameState::Done;
+                    self.base = None;
+                }
                 _ => eprintln!("warn: unrecognized state {state}"),
             },
             SetMeta::Speed(speed) => self.speed = speed,
@@ -78,6 +89,13 @@ impl Galaxy {
             ServerMessage::Destroy(id) => _ = self.fleets.remove(&id),
             _ => {}
         }
+    }
+
+    /// Get the current player's base for the active game.
+    /// Panics if the game is inactive.
+    pub fn base(self: &Galaxy) -> &Planet {
+        let id = self.base.expect("game is inactive");
+        self.planets.get(&id).expect("base does not exist")
     }
 
     pub fn alignment(self: &Galaxy, id: usize) -> f64 {

@@ -14,7 +14,6 @@ pub fn hypot(a: &proto::Planet, b: &proto::Planet) -> f64 {
 
 /// Estimate how much of a fleet of given size will travel from source to target after t seconds.
 /// Current implementation is based on a logistic regression of ~336k fleets from historic game logs.
-#[allow(unused)]
 pub fn estimate_arrived(
     t: f64,
     fleet_size: f64,
