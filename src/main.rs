@@ -34,7 +34,7 @@ fn start_output_thread(client_rx: Receiver<ClientMessage>) -> JoinHandle<()> {
         let mut out = BufWriter::new(stdout.lock());
 
         while let Ok(action) = client_rx.recv() {
-            if writeln!(out, "{}", action.to_string()).is_err() {
+            if writeln!(out, "{}", action).is_err() {
                 return;
             }
             if matches!(action, ClientMessage::Tock) && out.flush().is_err() {

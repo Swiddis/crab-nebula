@@ -9,7 +9,7 @@ pub const PRODUCTION_RATE: f64 = 1. / 50.;
 pub fn hypot(a: &proto::Planet, b: &proto::Planet) -> f64 {
     let dx = a.x - b.x;
     let dy = a.y - b.y;
-    return (dx * dx + dy * dy).sqrt();
+    (dx * dx + dy * dy).sqrt()
 }
 
 /// Estimate how much of a fleet of given size will travel from source to target after t seconds.
@@ -23,7 +23,7 @@ pub fn estimate_arrived(
 ) -> f64 {
     let dist = hypot(source, target);
     let prop = model::logistic(t, dist, source.radius, target.radius, fleet_size);
-    return fleet_size * prop;
+    fleet_size * prop
 }
 
 /// Estimate time before the given proportion of the fleet reaches the target

@@ -64,7 +64,7 @@ impl Engine {
 
         for fleet in self.g.fleets.values() {
             match map.get_mut(&fleet.target) {
-                Some(ingress) => ingress.push(&fleet),
+                Some(ingress) => ingress.push(fleet),
                 None => _ = map.insert(fleet.target, vec![fleet]),
             }
         }
@@ -80,14 +80,11 @@ impl Engine {
         let mut ibt: Vec<Planet> = self.g.planets.values().cloned().collect();
         for planet in ibt.iter_mut() {
             planet.ships = -(self.g.aligned_ships(planet.id) - RETAIN_PROP * planet.production);
-            match ingress.get(&planet.id) {
-                Some(fleets) => {
-                    planet.ships += fleets
-                        .iter()
-                        .map(|f| -self.g.aligned_ships(f.id))
-                        .sum::<f64>();
-                }
-                None => {}
+            if let Some(fleets) = ingress.get(&planet.id) {
+                planet.ships += fleets
+                    .iter()
+                    .map(|f| -self.g.aligned_ships(f.id))
+                    .sum::<f64>();
             }
         }
         ibt.retain(|p| p.ships > 0.0);

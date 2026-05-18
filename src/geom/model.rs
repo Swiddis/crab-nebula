@@ -16,11 +16,11 @@ const LM_I: [f64; 4] = [ 0.5729724241422721, 17.187043418429347, 1.0405148201323
 
 /// Model operates on normalized travel time by speed/distance
 fn norm(t: f64, dist: f64) -> f64 {
-    return SHIP_SPEED * t / dist;
+    SHIP_SPEED * t / dist
 }
 
 fn unnorm(t: f64, dist: f64) -> f64 {
-    return t * dist / SHIP_SPEED;
+    t * dist / SHIP_SPEED
 }
 
 /// Estimate the proportion of the fleet that's traveled from source to target at time t (relative to the fleet leaving)
@@ -31,7 +31,7 @@ pub fn logistic(t: f64, source_target_dist: f64, source_r: f64, target_r: f64, f
     let l = source_target_dist * LM_C[2][0] + source_r * LM_C[2][1] + target_r * LM_C[2][2] + fleet_size * LM_C[2][3] + LM_I[2];
     let b = source_target_dist * LM_C[3][0] + source_r * LM_C[3][1] + target_r * LM_C[3][2] + fleet_size * LM_C[3][3] + LM_I[3];
 
-    return l / (1.0 + (-k * (norm(t, source_target_dist) - t0)).exp()) + b;
+    l / (1.0 + (-k * (norm(t, source_target_dist) - t0)).exp()) + b
 }
 
 #[rustfmt::skip]
@@ -42,5 +42,5 @@ pub fn inv_logistic(p: f64, source_target_dist: f64, source_r: f64, target_r: f6
     let b = source_target_dist * LM_C[3][0] + source_r * LM_C[3][1] + target_r * LM_C[3][2] + fleet_size * LM_C[3][3] + LM_I[3];
 
     let kt = k * t0 - ((l + b - p) / (p - b)).ln();
-    return unnorm(kt / k, source_target_dist);
+    unnorm(kt / k, source_target_dist)
 }

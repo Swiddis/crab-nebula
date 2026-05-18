@@ -1,4 +1,4 @@
-use std::{iter, str, string};
+use std::{fmt, iter, str};
 use thiserror::Error;
 
 #[derive(Debug, Clone)]
@@ -94,23 +94,23 @@ pub enum ClientMessage {
     Message(String),
 }
 
-impl string::ToString for ClientMessage {
-    fn to_string(&self) -> String {
+impl fmt::Display for ClientMessage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ClientMessage::Login { name, token } => format!("/LOGIN\t{}\t{}", name, token),
+            ClientMessage::Login { name, token } => write!(f, "/LOGIN\t{}\t{}", name, token),
             ClientMessage::Send {
                 proportion,
                 source,
                 target,
             } => {
                 let pct = (proportion * 100.0).round().clamp(1.0, 100.0) as u8;
-                format!("/SEND\t{}\t{}\t{}", pct, source, target)
+                write!(f, "/SEND\t{}\t{}\t{}", pct, source, target)
             }
-            ClientMessage::Redir { source, target } => format!("/REDIR\t{}\t{}", source, target),
-            ClientMessage::Surrender => "/SURRENDER".to_string(),
-            ClientMessage::Tock => "/TOCK".to_string(),
-            ClientMessage::Ping(s) => format!("/PING\t{}", s),
-            ClientMessage::Message(s) => s.clone(),
+            ClientMessage::Redir { source, target } => write!(f, "/REDIR\t{}\t{}", source, target),
+            ClientMessage::Surrender => write!(f, "/SURRENDER"),
+            ClientMessage::Tock => write!(f, "/TOCK"),
+            ClientMessage::Ping(s) => write!(f, "/PING\t{}", s),
+            ClientMessage::Message(s) => write!(f, "{s}"),
         }
     }
 }

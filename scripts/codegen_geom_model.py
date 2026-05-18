@@ -47,11 +47,11 @@ const LM_I: [f64; 4] = {farr(intercepts)};
 
 /// Model operates on normalized travel time by speed/distance
 fn norm(t: f64, dist: f64) -> f64 {{
-    return SHIP_SPEED * t / dist;
+    SHIP_SPEED * t / dist
 }}
 
 fn unnorm(t: f64, dist: f64) -> f64 {{
-    return t * dist / SHIP_SPEED;
+    t * dist / SHIP_SPEED
 }}
 
 /// Estimate the proportion of the fleet that's traveled from source to target at time t (relative to the fleet leaving)
@@ -59,7 +59,7 @@ fn unnorm(t: f64, dist: f64) -> f64 {{
 pub fn logistic(t: f64, {plist(params)}) -> f64 {{
 {dot(model_params, params)}
 
-    return l / (1.0 + (-k * (norm(t, source_target_dist) - t0)).exp()) + b;
+    l / (1.0 + (-k * (norm(t, source_target_dist) - t0)).exp()) + b
 }}
 
 #[rustfmt::skip]
@@ -67,7 +67,7 @@ pub fn inv_logistic(p: f64, {plist(params)}) -> f64 {{
 {dot(model_params, params)}
 
     let kt = k * t0 - ((l + b - p) / (p - b)).ln();
-    return unnorm(kt / k, source_target_dist);
+    unnorm(kt / k, source_target_dist)
 }}
     """
     with open("src/geom/model.rs", "w") as fp:
