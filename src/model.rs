@@ -48,7 +48,7 @@ impl Galaxy {
             SetMeta::State(state) => match state.as_str() {
                 "PLAY" => {
                     self.state = GameState::Play;
-                    if let Some(p) = self.planets.values().filter(|p| p.owner == self.you).next() {
+                    if let Some(p) = self.planets.values().find(|p| p.owner == self.you) {
                         self.base = Some(p.id);
                     }
                 }

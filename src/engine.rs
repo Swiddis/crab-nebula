@@ -108,23 +108,23 @@ impl Engine {
         const TEST_PROPS: [f64; 4] = [1.00, 0.75, 0.50, 0.25];
         for test_prop in TEST_PROPS {
             let to_send = test_prop * surplus;
-            let t = geom::eta(SEND_SURVIVAL_PROP, to_send, source, target);
+            let time = geom::eta(SEND_SURVIVAL_PROP, to_send, source, target);
             let mut goal = target.ships;
             if self.g.alignment(target.owner) < 0.0 {
-                goal += PRODUCTION_RATE * t;
+                goal += PRODUCTION_RATE * time;
             }
 
             if to_send * SEND_SURVIVAL_PROP < goal / 3.0 {
                 // don't flood with bids that are unlikely to be taken
                 break;
             }
-            let arrived_at_t = geom::estimate_arrived(t, to_send, source, target);
+            let clears_goal = geom::estimate_arrived(time, to_send, source, target);
             bids.push(Bid {
                 source: source.id,
                 target: target.id,
-                to_send: to_send,
-                clears_goal: arrived_at_t,
-                time: t,
+                to_send,
+                clears_goal,
+                time,
             });
         }
 
@@ -215,7 +215,7 @@ impl Engine {
         for target in targets {
             if let Some(bvec) = bids.get_mut(&target.id) {
                 bvec.sort_by_key(|b| OrderedFloat(b.time));
-                self.take_bids(target.ships, &bvec, &mut source_limits);
+                self.take_bids(target.ships, bvec, &mut source_limits);
             }
         }
     }
