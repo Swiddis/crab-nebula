@@ -1,0 +1,23 @@
+services:
+  db:
+    image: postgres
+    restart: always
+    shm_size: 1gb
+    environment:
+      POSTGRES_USER: gbotuser
+      POSTGRES_PASSWORD: localhost
+      POSTGRES_DB: gbotdb
+    ports:
+      - 5432:5432
+    volumes:
+      - postgres_data:/var/lib/postgresql
+
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - 8080:8080
+
+volumes:
+  postgres_data:
+
