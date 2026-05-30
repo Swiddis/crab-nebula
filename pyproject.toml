@@ -1,10 +1,15 @@
 [project]
-name = "zzbot-scripts"
+name = "nebula"
 version = "0.1.0"
-description = "Scripts for work on zzbot"
+description = "Galcon bot code and scripts for work on nebula"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
+    "knapsack>=0.3.1",
+]
+
+[dependency-groups]
+dev = [
     "numpy>=2.4.4",
     "pandas>=3.0.3",
     "scikit-learn>=1.8.0",
