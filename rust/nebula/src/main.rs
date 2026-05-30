@@ -2,7 +2,8 @@ use std::collections::{HashMap, VecDeque};
 
 use ordered_float::OrderedFloat;
 
-use crate::{
+use galcon::{
+    engine::Engine,
     geom::{self, PRODUCTION_RATE},
     model::{self, Galaxy},
     proto::*,
@@ -21,13 +22,28 @@ struct Bid {
     time: f64,
 }
 
-pub struct Engine {
+pub struct Nebula {
     pub action_queue: VecDeque<ClientMessage>,
     g: Galaxy,
     t: f64,
 }
 
-impl Engine {
+impl Engine for Nebula {
+    fn handle(&mut self, message: ServerMessage) {
+        match message {
+            ServerMessage::Tick(t) => self.go(t),
+            ServerMessage::Reset => self.reset(),
+            msg => self.g.update(msg),
+        }
+    }
+
+    fn pop_action(&mut self) -> Option<ClientMessage> {
+        self.action_queue.pop_front()
+    }
+}
+
+impl Nebula {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self {
             action_queue: VecDeque::new(),
@@ -36,12 +52,12 @@ impl Engine {
         }
     }
 
-    fn reset(self: &mut Engine) {
+    fn reset(self: &mut Nebula) {
         self.t = 0.0;
         self.g.reset();
     }
 
-    fn go(self: &mut Engine, t: f64) {
+    fn go(self: &mut Nebula, t: f64) {
         if self.g.state != model::GameState::Play {
             return;
         }
@@ -51,16 +67,8 @@ impl Engine {
         self.t += t;
     }
 
-    pub fn handle(self: &mut Engine, command: ServerMessage) {
-        match command {
-            ServerMessage::Tick(t) => self.go(t),
-            ServerMessage::Reset => self.reset(),
-            msg => self.g.update(msg),
-        }
-    }
-
     /// map each planet to all fleets that are approaching the planet
-    fn ingress_map(self: &Engine) -> HashMap<usize, Vec<&Fleet>> {
+    fn ingress_map(self: &Nebula) -> HashMap<usize, Vec<&Fleet>> {
         let mut map: HashMap<usize, Vec<&Fleet>> = HashMap::new();
 
         for fleet in self.g.fleets.values() {
@@ -76,7 +84,7 @@ impl Engine {
     /// Get a list of potential target planets with ships adjusted to how many ships are necessary to satisfy the target,
     /// accounting for all active fleet ingress and retention.
     /// Doesn't account for production over time for enemy planets.
-    fn get_ingress_balanced_targets(self: &Engine) -> Vec<Planet> {
+    fn get_ingress_balanced_targets(self: &Nebula) -> Vec<Planet> {
         let ingress = self.ingress_map();
         let mut ibt: Vec<Planet> = self.g.planets.values().cloned().collect();
         for planet in ibt.iter_mut() {
@@ -101,7 +109,7 @@ impl Engine {
         ibt
     }
 
-    fn place_attack_bids(self: &mut Engine, source: &Planet, target: &Planet) -> Vec<Bid> {
+    fn place_attack_bids(self: &mut Nebula, source: &Planet, target: &Planet) -> Vec<Bid> {
         let mut bids: Vec<Bid> = Vec::new();
         let surplus = source.ships - RETAIN_PROP * source.production;
 
@@ -135,7 +143,7 @@ impl Engine {
     /// Assumes all bids have the same target with a threshold indicated by threshold.
     /// source_limits is updated according to the bids accepted.
     fn take_bids(
-        self: &mut Engine,
+        self: &mut Nebula,
         target_threshold: f64,
         bids: &Vec<Bid>,
         source_limits: &mut HashMap<usize, f64>,
@@ -184,7 +192,7 @@ impl Engine {
         }
     }
 
-    fn compute_tick(self: &mut Engine) {
+    fn compute_tick(self: &mut Nebula) {
         let targets = self.get_ingress_balanced_targets();
         let target_indices: HashMap<usize, usize> =
             targets.iter().enumerate().map(|(i, p)| (p.id, i)).collect();
@@ -219,4 +227,9 @@ impl Engine {
             }
         }
     }
+}
+
+fn main() {
+    let nebula = Nebula::new();
+    galcon::engine::run_engine(nebula);
 }

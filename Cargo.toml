@@ -1,8 +1,5 @@
-[package]
-name = "crab_nebula"
-version = "0.1.0"
-edition = "2024"
-
-[dependencies]
-ordered-float = "5.3.0"
-thiserror = "2.0.18"
+[workspace]
+resolver = "2"
+members = [
+    "rust/*"
+]

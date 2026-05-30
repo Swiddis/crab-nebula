@@ -1,14 +1,13 @@
-mod engine;
-mod geom;
-mod model;
-mod proto;
-
 use std::io::{self, BufRead, BufWriter, Write};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread::{self, JoinHandle};
 
-use crate::engine::Engine;
 use crate::proto::{ClientMessage, ServerMessage, parse_server_message};
+
+pub trait Engine {
+    fn handle(&mut self, message: ServerMessage);
+    fn pop_action(&mut self) -> Option<ClientMessage>;
+}
 
 fn start_input_thread(server_tx: Sender<ServerMessage>) -> JoinHandle<()> {
     thread::spawn(move || {
@@ -44,11 +43,14 @@ fn start_output_thread(client_rx: Receiver<ClientMessage>) -> JoinHandle<()> {
     })
 }
 
-fn run_engine_loop(server_rx: Receiver<ServerMessage>, client_tx: Sender<ClientMessage>) {
-    let mut engine = Engine::new();
+fn run_engine_loop(
+    server_rx: Receiver<ServerMessage>,
+    client_tx: Sender<ClientMessage>,
+    mut engine: impl Engine,
+) {
     while let Ok(message) = server_rx.recv() {
         engine.handle(message);
-        while let Some(action) = engine.action_queue.pop_front() {
+        while let Some(action) = engine.pop_action() {
             let Ok(_) = client_tx.send(action) else {
                 return;
             };
@@ -56,13 +58,13 @@ fn run_engine_loop(server_rx: Receiver<ServerMessage>, client_tx: Sender<ClientM
     }
 }
 
-fn main() {
+pub fn run_engine(engine: impl Engine) {
     let (client_tx, client_rx): (Sender<ClientMessage>, Receiver<ClientMessage>) = mpsc::channel();
     let (server_tx, server_rx): (Sender<ServerMessage>, Receiver<ServerMessage>) = mpsc::channel();
 
     let in_handle = start_input_thread(server_tx);
     let out_handle = start_output_thread(client_rx);
-    run_engine_loop(server_rx, client_tx);
+    run_engine_loop(server_rx, client_tx, engine);
 
     in_handle.join().expect("input thread panicked");
     out_handle.join().expect("output thread panicked");

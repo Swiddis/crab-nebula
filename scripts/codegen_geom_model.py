@@ -70,6 +70,6 @@ pub fn inv_logistic(p: f64, {plist(params)}) -> f64 {{
     unnorm(kt / k, source_target_dist)
 }}
     """
-    with open("src/geom/model.rs", "w") as fp:
+    with open("rust/galcon/src/geom/model.rs", "w") as fp:
         fp.write(template.strip())
         fp.write("\n")

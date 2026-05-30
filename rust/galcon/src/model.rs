@@ -131,3 +131,9 @@ impl Galaxy {
         }
     }
 }
+
+impl Default for Galaxy {
+    fn default() -> Self {
+        Self::new()
+    }
+}

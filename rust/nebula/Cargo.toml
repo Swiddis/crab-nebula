@@ -1,0 +1,8 @@
+[package]
+name = "nebula"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+galcon = { path = "../galcon" }
+ordered-float = "5.3.0"
