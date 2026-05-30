@@ -4,9 +4,9 @@ services:
     restart: always
     shm_size: 1gb
     environment:
-      POSTGRES_USER: gbotuser
-      POSTGRES_PASSWORD: localhost
-      POSTGRES_DB: gbotdb
+      POSTGRES_USER: matchserv_user
+      POSTGRES_PASSWORD: matchserv_pass
+      POSTGRES_DB: matchserv
     ports:
       - 5432:5432
     volumes:
@@ -20,4 +20,3 @@ services:
 
 volumes:
   postgres_data:
-

@@ -1,3 +1,6 @@
+from math import hypot
+
+
 class User:
     n: int
     name: str
@@ -29,12 +32,15 @@ class Planet:
         self.production = production
         self.radius = radius
 
-    def distance(self, entity):
-        return max(
-            ((self.x - entity.x) ** 2 + (self.y - entity.y) ** 2)
-            - (self.radius + entity.radius),
-            0,
+    def __str__(self) -> str:
+        return (
+            f"Planet(n={self.n} o={self.owner} s={round(self.ships)} "
+            + f"x={round(self.x)} y={round(self.y)} "
+            + f"p={round(self.production)} r={round(self.radius)})"
         )
+
+    def distance(self, entity: Planet | Fleet):
+        return hypot(self.x - entity.x, self.y - entity.y)
 
     def is_neutral(self, users):
         return users[self.owner].team == 0
@@ -78,14 +84,16 @@ class Galaxy:
     t: float
     state: str
     you: int
+    frame: int
 
     def __init__(self):
         self.reset()
 
     def reset(self):
-        self.state = ""
+        self.state = "INIT"
         self.you = 0
         self.t = 0.0
+        self.frame = 0
         self.users = {}
         self.planets = {}
         self.fleets = {}

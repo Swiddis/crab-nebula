@@ -5,7 +5,12 @@ description = "Galcon bot code and scripts for work on nebula"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
+    "fastapi[standard]>=0.136.3",
+    "sqlmodel>=0.0.38",
     "knapsack>=0.3.1",
+    "asyncpg>=0.31.0",
+    "glicko2>=2.1.0",
+    "requests>=2.34.2",
 ]
 
 [dependency-groups]

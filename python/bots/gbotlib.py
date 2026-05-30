@@ -40,6 +40,7 @@ def tick(galaxy, line, bot):
     send("/TOCK")
     sys.stdout.flush()
     galaxy.t += float(line[1])
+    galaxy.frame += 1
 
 
 def print(galaxy, line, bot):
@@ -48,6 +49,7 @@ def print(galaxy, line, bot):
 
 def results(galaxy, line, bot):
     log("Result: " + "\t".join(line[1:]))
+    bot(galaxy, result=line)
 
 
 def reset_galaxy(galaxy, line, bot):
