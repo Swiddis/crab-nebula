@@ -16,12 +16,27 @@ def hash_model(model):
     return h.hexdigest()[:10]
 
 
+def get_players():
+    res = requests.get("http://localhost:8000/player").json()
+    return [
+        (
+            p["rating"],
+            {f"x_{i}": weight for i, weight in enumerate(p["model"]["weights"])},
+        )
+        for p in res
+    ]
+
+
 if __name__ == "__main__":
     pbounds = {f"x_{i}": WEIGHT_BOUNDS for i in range(BAYES_PARAM_COUNT)}
     acq = acquisition.UpperConfidenceBound()
     optimizer = BayesianOptimization(f=None, acquisition_function=acq, pbounds=pbounds)
 
-    for i in range(64):
+    players = get_players()
+    for rating, params in players:
+        optimizer.register(params=params, target=rating)
+
+    for i in range(8):
         point = optimizer.suggest()
         model = {"weights": [point[f"x_{i}"] for i in range(BAYES_PARAM_COUNT)]}
         make_player = {
@@ -29,5 +44,6 @@ if __name__ == "__main__":
             "model_version": 1,
             "model": model,
         }
+        print("registering", make_player)
         res = requests.post("http://localhost:8000/player", json=make_player).json()
         assert res["acknowledged"]

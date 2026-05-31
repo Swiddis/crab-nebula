@@ -271,3 +271,9 @@ async def make_player(player: MakePlayerRequest, db: AsyncSession = Depends(get_
     db.add(mp)
     await db.commit()
     return {"acknowledged": True}
+
+
+@app.get("/player")
+async def get_players(db: AsyncSession = Depends(get_db)):
+    res = await db.execute(select(Player))
+    return res.scalars().all()
