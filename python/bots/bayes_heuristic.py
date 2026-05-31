@@ -114,7 +114,32 @@ def save_result(result_line: list[str], galaxy: ge.Galaxy):
         print("lost", file=sys.stderr)
         return
 
-    result = {"duration": duration, "winner": player}
+    our_score, their_score, neutral_score = 0, 0, 0
+    for p in galaxy.planets.values():
+        if p.owner == galaxy.you:
+            our_score += p.production
+        elif galaxy.users[p.owner].team == 0:
+            neutral_score += p.production
+        else:
+            their_score += p.production
+
+    total = our_score + their_score + neutral_score
+    win_score, loss_score = (
+        (1.0, 0.0)
+        if their_score == 0 and our_score > 0
+        else (0.0, 1.0)
+        if our_score == 0 and their_score > 0
+        else (
+            our_score / total,
+            their_score / total,
+        )
+    )
+    result = {
+        "duration": duration,
+        "winner": player,
+        "win_score": win_score,
+        "loss_score": loss_score,
+    }
 
     save = requests.post(
         f"http://localhost:8000/match/{state_hash}/complete", json=result
@@ -122,7 +147,9 @@ def save_result(result_line: list[str], galaxy: ge.Galaxy):
     if not save.get("acknowledged", False):
         print(f"failed to save result: {save}", file=sys.stderr)
     else:
-        print("win saved", file=sys.stderr)
+        print(
+            f"result saved (Δscore={round(win_score - loss_score, 3)})", file=sys.stderr
+        )
 
 
 def init_weights(galaxy: ge.Galaxy):

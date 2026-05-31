@@ -42,6 +42,8 @@ class MatchRecord(SQLModel, table=True):
     player2: int | None
     duration: float | None
     winner: int | None
+    win_score: float | None
+    loss_score: float | None
 
 
 class Player(SQLModel, table=True):
@@ -57,6 +59,8 @@ class Player(SQLModel, table=True):
 class MatchResult(BaseModel):
     winner: int
     duration: float
+    win_score: float
+    loss_score: float
 
 
 class MakePlayerRequest(BaseModel):
@@ -213,9 +217,10 @@ async def rate_match(db: AsyncSession, m: MatchRecord) -> bool:
     p2 = locked_high if m.player1 == p_low_id else locked_low
     g2_p1 = glicko2.Player(rating=p1.rating, rd=p1.rd, vol=p1.vol)
     g2_p2 = glicko2.Player(rating=p2.rating, rd=p2.rd, vol=p2.vol)
-    p1_score = 1.0 if m.winner == 1 else 0.0
+    p1_score = m.win_score if m.winner == 1 else m.loss_score
+    p2_score = m.win_score if m.winner == 2 else m.loss_score
     g2_p1.update_player([p2.rating], [p2.rd], [p1_score])
-    g2_p2.update_player([p1.rating], [p1.rd], [1.0 - p1_score])
+    g2_p2.update_player([p1.rating], [p1.rd], [p2_score])
 
     p1.rating = g2_p1.getRating()
     p1.rd = round(g2_p1.getRd())
@@ -248,6 +253,8 @@ async def complete_match(
     match_record.winner = result.winner
     match_record.duration = result.duration
     match_record.modify_time = datetime.now()
+    match_record.win_score = result.win_score
+    match_record.loss_score = result.loss_score
     db.add(match_record)
     await db.commit()
 
