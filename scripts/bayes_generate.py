@@ -38,7 +38,7 @@ def do_optimize_loop():
     rd_ct = 0
     for rating, rd, params in players:
         optimizer.register(params=params, target=rating)
-        rd_ct += 1 if rd >= 100 else 0
+        rd_ct += 1 if rd >= 80 else 0
 
     for _ in range(16 - rd_ct):
         point = optimizer.suggest()
