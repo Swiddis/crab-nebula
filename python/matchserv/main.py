@@ -315,6 +315,6 @@ async def make_player(player: MakePlayerRequest, db: AsyncSession = Depends(get_
 
 
 @app.get("/player")
-async def get_players(db: AsyncSession = Depends(get_db)):
-    res = await db.execute(select(Player))
+async def get_players(model_version: int, db: AsyncSession = Depends(get_db)):
+    res = await db.execute(select(Player).where(Player.model_version == model_version))
     return res.scalars().all()

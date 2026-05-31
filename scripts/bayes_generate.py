@@ -18,7 +18,7 @@ def hash_model(model):
 
 
 def get_players():
-    res = requests.get("http://localhost:8000/player").json()
+    res = requests.get("http://localhost:8000/player?model_version=1").json()
     return [
         (
             p["rating"],
