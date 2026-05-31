@@ -170,14 +170,14 @@ async def make_match(
         select_match_players = (
             select(Player)
             .where(Player.model_version == model_version)
-            .order_by(-Player.rd)
-            .limit(32)
+            .order_by(Player.rd.desc())
+            .limit(50)
             .with_for_update(skip_locked=True, read=True)
         )
         result = await db.execute(select_match_players)
         maybe_players = list(result.scalars().all())
         player = random.choices(
-            maybe_players, weights=[1 / (p.rd + 1) for p in maybe_players]
+            maybe_players, weights=[p.rd**2 for p in maybe_players]
         )[0]
         paired_match.modify_time = datetime.now()
         paired_match.player1 = player.id
