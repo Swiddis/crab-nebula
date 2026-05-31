@@ -130,8 +130,8 @@ def save_result(result_line: list[str], galaxy: ge.Galaxy):
         else (0.0, 1.0)
         if our_score == 0 and their_score > 0
         else (
-            our_score / total,
-            their_score / total,
+            (our_score + 0.5 * neutral_score) / total,
+            (their_score + 0.5 * neutral_score) / total,
         )
     )
     result = {
