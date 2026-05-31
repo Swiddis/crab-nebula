@@ -1,11 +1,12 @@
+import logging
 import random
 import time
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import datetime
 from enum import Enum
 
 import glicko2
-from fastapi import Depends, FastAPI
+from fastapi import BackgroundTasks, Depends, FastAPI
 from pydantic import BaseModel
 from sqlalchemy import func, text
 from sqlalchemy.dialects.postgresql import JSONB, insert
@@ -17,6 +18,7 @@ from sqlmodel import Field, SQLModel, select
 DATABASE_URL = (
     "postgresql+asyncpg://matchserv_user:matchserv_pass@localhost:5432/matchserv"
 )
+logger = logging.Logger(__name__)
 
 
 class MatchState(str, Enum):
@@ -47,7 +49,8 @@ class Player(SQLModel, table=True):
     model_version: int = Field(index=True)
     name: str = Field(index=True)
     rating: int
-    rd: float
+    rd: int
+    vol: float
     model: dict = Field(sa_type=JSONB)
 
 
@@ -186,9 +189,59 @@ async def make_match(
         }
 
 
+async def rate_match(db: AsyncSession, m: MatchRecord) -> bool:
+    if m.player1 is None or m.player2 is None:
+        return False
+    # no deadlock plz
+    p_low_id, p_high_id = (
+        min(m.player1, m.player2),
+        max(m.player1, m.player2),
+    )
+    low_result = await db.execute(
+        select(Player).where(Player.id == p_low_id).with_for_update(skip_locked=True)
+    )
+    locked_low = low_result.scalar_one_or_none()
+    if locked_low is None:
+        return False
+
+    high_result = await db.execute(
+        select(Player).where(Player.id == p_high_id).with_for_update(skip_locked=True)
+    )
+    locked_high = high_result.scalar_one_or_none()
+    if locked_high is None:
+        return False
+
+    p1 = locked_low if m.player1 == p_low_id else locked_high
+    p2 = locked_high if m.player1 == p_low_id else locked_low
+    g2_p1 = glicko2.Player(rating=p1.rating, rd=p1.rd, vol=p1.vol)
+    g2_p2 = glicko2.Player(rating=p2.rating, rd=p2.rd, vol=p2.vol)
+    p1_score = 1.0 if m.winner == 1 else 0.0
+    g2_p1.update_player([p2.rating], [p2.rd], [p1_score])
+    g2_p2.update_player([p1.rating], [p1.rd], [1.0 - p1_score])
+
+    p1.rating = g2_p1.getRating()
+    p1.rd = round(g2_p1.getRd())
+    p1.vol = g2_p1.vol
+    p2.rating = g2_p2.getRating()
+    p2.rd = round(g2_p2.getRd())
+    p2.vol = g2_p2.vol
+
+    m.match_state = MatchState.RATED
+    m.modify_time = datetime.now()
+
+    db.add(p1)
+    db.add(p2)
+    db.add(m)
+    await db.commit()
+    return True
+
+
 @app.post("/match/{state_hash}/complete")
 async def complete_match(
-    state_hash: str, result: MatchResult, db: AsyncSession = Depends(get_db)
+    state_hash: str,
+    result: MatchResult,
+    bg: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
 ):
     match_record = await get_match_record(state_hash, db)
     if not match_record:
@@ -199,6 +252,9 @@ async def complete_match(
     match_record.modify_time = datetime.now()
     db.add(match_record)
     await db.commit()
+
+    bg.add_task(rate_match, db, match_record)
+
     return {"acknowledged": True}
 
 
@@ -210,6 +266,7 @@ async def make_player(player: MakePlayerRequest, db: AsyncSession = Depends(get_
         model=player.model,
         rating=1500,
         rd=300,
+        vol=0.06,
     )
     db.add(mp)
     await db.commit()
