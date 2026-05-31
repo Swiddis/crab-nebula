@@ -8,6 +8,7 @@ Only using information that's readily available from individual planet pairs
 import heapq
 import math
 import sys
+from collections import defaultdict
 from hashlib import sha256
 
 import galcon_entities as ge
@@ -156,6 +157,7 @@ def bot(galaxy: ge.Galaxy, **kwargs):
     # our beloved bot alg
     ships_left: dict[int, float] = {}
     send_queue: list[tuple[tuple, int, int, float, float]] = []
+    flow: dict[tuple[int, int], float] = defaultdict(lambda: 0.0)
     for source in galaxy.planets.values():
         if source.owner != galaxy.you:
             continue
@@ -170,12 +172,20 @@ def bot(galaxy: ge.Galaxy, **kwargs):
                 sort_key = (-value, send * source.ships)
                 send_queue.append((sort_key, source.n, target.n, send, source.ships))
                 ships_left[source.n] = source.ships
+                # cancel out direct cycles to reduce noise
+                flow[(source.n, target.n)] += send * source.ships
+                flow[(target.n, source.n)] -= send * source.ships
 
     heapq.heapify(send_queue)
     while len(send_queue) > 0:
         _, source, target, send, init_ships = heapq.heappop(send_queue)
-        if ships_left[source] >= send * init_ships and send > 0.0:
-            print(f"/SEND\t{round(100 * send)}\t{source}\t{target}")
+        if (
+            ships_left[source] >= send * init_ships
+            and send > 0.0
+            and flow[(source, target)] > 0.0
+        ):
+            to_send = flow[(source, target)] / init_ships
+            print(f"/SEND\t{round(100 * to_send)}\t{source}\t{target}")
             ships_left[source] -= send * init_ships
 
     print("/TOCK")
