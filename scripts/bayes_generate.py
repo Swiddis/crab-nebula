@@ -9,6 +9,8 @@ BAYES_PARAM_COUNT = 15
 # This lets any individual weight govern the send sigmoid if needed: sigmoid(5.293) ~= 0.995
 WEIGHT_BOUNDS = (-5.3, 5.3)
 
+GENERATE_THRESHOLD = 75
+
 
 def hash_model(model):
     dat = json.dumps(model)
@@ -37,9 +39,9 @@ def do_optimize_loop():
     players = get_players()
     rd_ct = 0
     for rating, rd, params in players:
-        if rd < 70:
+        if rd < GENERATE_THRESHOLD:
             optimizer.register(params=params, target=rating)
-        rd_ct += 1 if rd >= 70 else 0
+        rd_ct += 1 if rd >= GENERATE_THRESHOLD else 0
 
     for _ in range(16 - rd_ct):
         point = optimizer.suggest()
