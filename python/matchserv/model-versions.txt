@@ -1,2 +1,2 @@
-0 - unspecified
+0 - unspecified / player without an associated model
 1 - bayes_heuristic.py (15 params)
