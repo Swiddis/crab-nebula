@@ -109,10 +109,6 @@ def save_result(result_line: list[str], galaxy: ge.Galaxy):
     global state_hash
 
     duration, winner = float(result_line[2]), int(result_line[4])
-    if winner != galaxy.you:
-        # avoid collisions with loser by only reporting games we won
-        print("lost", file=sys.stderr)
-        return
 
     our_score, their_score, neutral_score = 0, 0, 0
     for p in galaxy.planets.values():
@@ -124,7 +120,7 @@ def save_result(result_line: list[str], galaxy: ge.Galaxy):
             their_score += p.production
 
     total = our_score + their_score + neutral_score
-    win_score, loss_score = (
+    our_score, their_score = (
         (1.0, 0.0)
         if their_score == 0 and our_score > 0
         else (0.0, 1.0)
@@ -134,25 +130,38 @@ def save_result(result_line: list[str], galaxy: ge.Galaxy):
             (their_score + 0.5 * neutral_score) / total,
         )
     )
+    if winner == galaxy.you:
+        win_score, loss_score = our_score, their_score
+    else:
+        win_score, loss_score = their_score, our_score
+    opponent = [
+        user
+        for user in galaxy.users.values()
+        if user.team != 0 and user.n != galaxy.you
+    ][0]
     result = {
         "duration": duration,
-        "winner": player,
+        "winner": player if winner == galaxy.you else 3 - player,
         "win_score": win_score,
         "loss_score": loss_score,
+        "opponent": opponent.name,
     }
 
     save = requests.post(
         f"http://localhost:8000/match/{state_hash}/complete", json=result
     ).json()
-    if not save.get("acknowledged", False):
+    if save is None:
+        print("received no response from server", file=sys.stderr)
+    elif not save.get("acknowledged", False):
         print(f"failed to save result: {save}", file=sys.stderr)
     else:
         print(
-            f"result saved (Δscore={round(win_score - loss_score, 3)})", file=sys.stderr
+            f"result saved (Δscore={round(our_score - their_score, 3)})",
+            file=sys.stderr,
         )
 
 
-def init_weights(galaxy: ge.Galaxy):
+def init_weights(galaxy: ge.Galaxy, opponent: str):
     global player
     global weights
     global state_hash
@@ -164,7 +173,7 @@ def init_weights(galaxy: ge.Galaxy):
     state_hash = h.hexdigest()
 
     res = requests.post(
-        f"http://localhost:8000/match/{state_hash}?model_version=1"
+        f"http://localhost:8000/match/{state_hash}?model_version=1&opponent={opponent}"
     ).json()
     player = res["player"]
     weights = res["model"]["weights"]
@@ -179,7 +188,12 @@ def bot(galaxy: ge.Galaxy, **kwargs):
         save_result(kwargs["result"], galaxy)
         return
     if galaxy.frame == 0:
-        init_weights(galaxy)
+        opponent = [
+            user
+            for user in galaxy.users.values()
+            if user.team != 0 and user.n != galaxy.you
+        ][0]
+        init_weights(galaxy, opponent.name)
 
     # our beloved bot alg
     ships_left: dict[int, float] = {}

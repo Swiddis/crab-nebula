@@ -49,7 +49,7 @@ class MatchRecord(SQLModel, table=True):
 class Player(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     model_version: int = Field(index=True)
-    name: str = Field(index=True)
+    name: str = Field(index=True, unique=True)
     rating: int
     rd: int
     vol: float
@@ -61,6 +61,7 @@ class MatchResult(BaseModel):
     duration: float
     win_score: float
     loss_score: float
+    opponent: str
 
 
 class MakePlayerRequest(BaseModel):
@@ -140,7 +141,10 @@ async def get_match_record(state_hash: str, db: AsyncSession):
 
 @app.post("/match/{state_hash}")
 async def make_match(
-    state_hash: str, model_version: int, db: AsyncSession = Depends(get_db)
+    state_hash: str,
+    model_version: int,
+    opponent: str,
+    db: AsyncSession = Depends(get_db),
 ):
     await reserve_state_record(state_hash, db)
     paired_match = await get_match_record(state_hash, db)
@@ -157,27 +161,42 @@ async def make_match(
         )
         result = await db.execute(select_opponent)
         maybe_opponents = list(result.scalars().all())
-        opponent = random.choice(maybe_opponents)
-        if opponent.id is None:
+        opp = random.choice(maybe_opponents)
+        if opp.id is None:
             raise ValueError("fatal: received missing primary key")
 
         paired_match.match_state = MatchState.PLAY
         paired_match.modify_time = datetime.now()
-        paired_match.player2 = opponent.id
+        paired_match.player2 = opp.id
         db.add(paired_match)
         await db.commit()
         return {
             "player": 2,
-            "model": opponent.model,
+            "model": opp.model,
         }
     else:
-        select_match_players = (
+        maybe_opponent = await db.execute(
             select(Player)
-            .where(Player.model_version == model_version)
-            .order_by(Player.rd.desc(), Player.rating.desc())
-            .limit(8)
-            .with_for_update(skip_locked=True, read=True)
+            .where(Player.model_version == 0)
+            .where(Player.name == opponent)
         )
+        opp = maybe_opponent.scalars().first()
+        if opp is not None:
+            select_match_players = (
+                select(Player)
+                .where(Player.model_version == model_version)
+                .order_by(func.random() * func.abs(Player.rating - opp.rating))
+                .limit(32)
+                .with_for_update(skip_locked=True, read=True)
+            )
+        else:
+            select_match_players = (
+                select(Player)
+                .where(Player.model_version == model_version)
+                .order_by(Player.rd.desc(), Player.rating.desc())
+                .limit(32)
+                .with_for_update(skip_locked=True, read=True)
+            )
         result = await db.execute(select_match_players)
         maybe_players = list(result.scalars().all())
         player = random.choices(
@@ -185,6 +204,8 @@ async def make_match(
         )[0]
         paired_match.modify_time = datetime.now()
         paired_match.player1 = player.id
+        if opp is not None:
+            paired_match.player2 = opp.id
         db.add(paired_match)
         await db.commit()
         return {
@@ -251,6 +272,19 @@ async def complete_match(
     match_record = await get_match_record(state_hash, db)
     if not match_record:
         raise ValueError("attempted to complete a nonexistent match")
+
+    if match_record.match_state in (MatchState.DONE, MatchState.RATED):
+        return {"acknowledged": True}  # already counted
+
+    if match_record.player2 is None:
+        opp_exec = await db.execute(
+            select(Player).where(Player.name == result.opponent)
+        )
+        opp = opp_exec.scalars().first()
+        if opp is None:
+            return {"acknowledged": False, "reason": "opponent is not registered"}
+        match_record.player2 = opp.id
+
     match_record.match_state = MatchState.DONE
     match_record.winner = result.winner
     match_record.duration = result.duration
