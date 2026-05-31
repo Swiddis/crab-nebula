@@ -148,8 +148,8 @@ async def make_match(
             select(Player)
             .where(Player.model_version == model_version)
             .where(Player.id != paired_player.id)
-            .order_by(func.abs(Player.rating - paired_player.rating))
-            .limit(10)
+            .order_by(func.random() * func.abs(Player.rating - paired_player.rating))
+            .limit(32)
         )
         result = await db.execute(select_opponent)
         maybe_opponents = list(result.scalars().all())
@@ -170,15 +170,13 @@ async def make_match(
         select_match_players = (
             select(Player)
             .where(Player.model_version == model_version)
-            .order_by(Player.rd.desc())
-            .limit(50)
+            .order_by(func.random())
+            .limit(32)
             .with_for_update(skip_locked=True, read=True)
         )
         result = await db.execute(select_match_players)
         maybe_players = list(result.scalars().all())
-        player = random.choices(
-            maybe_players, weights=[p.rd**2 for p in maybe_players]
-        )[0]
+        player = random.choices(maybe_players, weights=[p.rd for p in maybe_players])[0]
         paired_match.modify_time = datetime.now()
         paired_match.player1 = player.id
         db.add(paired_match)

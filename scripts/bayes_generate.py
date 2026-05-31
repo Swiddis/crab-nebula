@@ -31,15 +31,15 @@ def get_players():
 
 def do_optimize_loop():
     pbounds = {f"x_{i}": WEIGHT_BOUNDS for i in range(BAYES_PARAM_COUNT)}
-    acq = acquisition.UpperConfidenceBound()
+    acq = acquisition.ProbabilityOfImprovement(xi=0.01)
     optimizer = BayesianOptimization(f=None, acquisition_function=acq, pbounds=pbounds)
 
     players = get_players()
     rd_ct = 0
     for rating, rd, params in players:
-        if rd < 80:
+        if rd < 70:
             optimizer.register(params=params, target=rating)
-        rd_ct += 1 if rd >= 80 else 0
+        rd_ct += 1 if rd >= 70 else 0
 
     for _ in range(16 - rd_ct):
         point = optimizer.suggest()
