@@ -37,7 +37,8 @@ def do_optimize_loop():
     players = get_players()
     rd_ct = 0
     for rating, rd, params in players:
-        optimizer.register(params=params, target=rating)
+        if rd < 80:
+            optimizer.register(params=params, target=rating)
         rd_ct += 1 if rd >= 80 else 0
 
     for _ in range(16 - rd_ct):
@@ -56,4 +57,4 @@ def do_optimize_loop():
 if __name__ == "__main__":
     while True:
         do_optimize_loop()
-        time.sleep(60)
+        time.sleep(120)
