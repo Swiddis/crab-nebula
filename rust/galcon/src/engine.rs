@@ -2,10 +2,11 @@ use std::io::{self, BufRead, BufWriter, Write};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread::{self, JoinHandle};
 
+use crate::model::Galaxy;
 use crate::proto::{ClientMessage, ServerMessage, parse_server_message};
 
 pub trait Engine {
-    fn handle(&mut self, message: ServerMessage);
+    fn handle(&mut self, message: &ServerMessage, galaxy: &Galaxy);
     fn pop_action(&mut self) -> Option<ClientMessage>;
 }
 
@@ -48,8 +49,11 @@ fn run_engine_loop(
     client_tx: Sender<ClientMessage>,
     mut engine: impl Engine,
 ) {
+    let mut galaxy = Galaxy::new();
+
     while let Ok(message) = server_rx.recv() {
-        engine.handle(message);
+        galaxy.update(&message);
+        engine.handle(&message, &galaxy);
         while let Some(action) = engine.pop_action() {
             let Ok(_) = client_tx.send(action) else {
                 return;

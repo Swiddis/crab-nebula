@@ -24,16 +24,15 @@ struct Bid {
 
 pub struct Nebula {
     pub action_queue: VecDeque<ClientMessage>,
-    g: Galaxy,
     t: f64,
 }
 
 impl Engine for Nebula {
-    fn handle(&mut self, message: ServerMessage) {
+    fn handle(&mut self, message: &ServerMessage, galaxy: &Galaxy) {
         match message {
-            ServerMessage::Tick(t) => self.go(t),
+            ServerMessage::Tick(t) => self.go(*t, galaxy),
             ServerMessage::Reset => self.reset(),
-            msg => self.g.update(msg),
+            _ => {}
         }
     }
 
@@ -47,31 +46,29 @@ impl Nebula {
     pub fn new() -> Self {
         Self {
             action_queue: VecDeque::new(),
-            g: Galaxy::new(),
             t: 0.0,
         }
     }
 
     fn reset(self: &mut Nebula) {
         self.t = 0.0;
-        self.g.reset();
     }
 
-    fn go(self: &mut Nebula, t: f64) {
-        if self.g.state != model::GameState::Play {
+    fn go(self: &mut Nebula, t: f64, g: &Galaxy) {
+        if g.state != model::GameState::Play {
             return;
         }
 
-        self.compute_tick();
+        self.compute_tick(g);
         self.action_queue.push_back(ClientMessage::Tock);
         self.t += t;
     }
 
     /// map each planet to all fleets that are approaching the planet
-    fn ingress_map(self: &Nebula) -> HashMap<usize, Vec<&Fleet>> {
+    fn ingress_map<'a>(&self, g: &'a Galaxy) -> HashMap<usize, Vec<&'a Fleet>> {
         let mut map: HashMap<usize, Vec<&Fleet>> = HashMap::new();
 
-        for fleet in self.g.fleets.values() {
+        for fleet in g.fleets.values() {
             match map.get_mut(&fleet.target) {
                 Some(ingress) => ingress.push(fleet),
                 None => _ = map.insert(fleet.target, vec![fleet]),
@@ -84,16 +81,13 @@ impl Nebula {
     /// Get a list of potential target planets with ships adjusted to how many ships are necessary to satisfy the target,
     /// accounting for all active fleet ingress and retention.
     /// Doesn't account for production over time for enemy planets.
-    fn get_ingress_balanced_targets(self: &Nebula) -> Vec<Planet> {
-        let ingress = self.ingress_map();
-        let mut ibt: Vec<Planet> = self.g.planets.values().cloned().collect();
+    fn get_ingress_balanced_targets(&self, g: &Galaxy) -> Vec<Planet> {
+        let ingress = self.ingress_map(g);
+        let mut ibt: Vec<Planet> = g.planets.values().cloned().collect();
         for planet in ibt.iter_mut() {
-            planet.ships = -(self.g.aligned_ships(planet.id) - RETAIN_PROP * planet.production);
+            planet.ships = -(g.aligned_ships(planet.id) - RETAIN_PROP * planet.production);
             if let Some(fleets) = ingress.get(&planet.id) {
-                planet.ships += fleets
-                    .iter()
-                    .map(|f| -self.g.aligned_ships(f.id))
-                    .sum::<f64>();
+                planet.ships += fleets.iter().map(|f| -g.aligned_ships(f.id)).sum::<f64>();
             }
         }
         ibt.retain(|p| p.ships > 0.0);
@@ -103,13 +97,18 @@ impl Nebula {
                 -OrderedFloat(p.production / p.ships),
                 // ties for prod/ships generally only happens in the opening, in this case prioritize our side
                 // overall if there's a tie, we _most likely_ have more friends closer to our initial base
-                OrderedFloat(geom::hypot(p, self.g.base())),
+                OrderedFloat(geom::hypot(p, g.base())),
             )
         });
         ibt
     }
 
-    fn place_attack_bids(self: &mut Nebula, source: &Planet, target: &Planet) -> Vec<Bid> {
+    fn place_attack_bids(
+        self: &mut Nebula,
+        source: &Planet,
+        target: &Planet,
+        g: &Galaxy,
+    ) -> Vec<Bid> {
         let mut bids: Vec<Bid> = Vec::new();
         let surplus = source.ships - RETAIN_PROP * source.production;
 
@@ -118,7 +117,7 @@ impl Nebula {
             let to_send = test_prop * surplus;
             let time = geom::eta(SEND_SURVIVAL_PROP, to_send, source, target);
             let mut goal = target.ships;
-            if self.g.alignment(target.owner) < 0.0 {
+            if g.alignment(target.owner) < 0.0 {
                 goal += PRODUCTION_RATE * time;
             }
 
@@ -147,6 +146,7 @@ impl Nebula {
         target_threshold: f64,
         bids: &Vec<Bid>,
         source_limits: &mut HashMap<usize, f64>,
+        g: &Galaxy,
     ) {
         let mut take_bids: HashMap<usize, &Bid> = HashMap::new();
         let mut clears_threshold = false;
@@ -177,8 +177,7 @@ impl Nebula {
         }
 
         for bid in take_bids.values() {
-            let source = self
-                .g
+            let source = g
                 .planets
                 .get(&bid.source)
                 .expect("received bid from nonexistent planet");
@@ -192,15 +191,14 @@ impl Nebula {
         }
     }
 
-    fn compute_tick(self: &mut Nebula) {
-        let targets = self.get_ingress_balanced_targets();
+    fn compute_tick(self: &mut Nebula, g: &Galaxy) {
+        let targets = self.get_ingress_balanced_targets(g);
         let target_indices: HashMap<usize, usize> =
             targets.iter().enumerate().map(|(i, p)| (p.id, i)).collect();
-        let our_planets: Vec<Planet> = self
-            .g
+        let our_planets: Vec<Planet> = g
             .planets
             .values()
-            .filter(|p| p.owner == self.g.you)
+            .filter(|p| p.owner == g.you)
             .cloned()
             .collect();
 
@@ -214,8 +212,8 @@ impl Nebula {
             _ = source_limits.insert(source.id, lim);
             for target in targets.iter() {
                 match bids.get_mut(&target.id) {
-                    Some(v) => v.append(&mut self.place_attack_bids(source, target)),
-                    None => _ = bids.insert(target.id, self.place_attack_bids(source, target)),
+                    Some(v) => v.append(&mut self.place_attack_bids(source, target, g)),
+                    None => _ = bids.insert(target.id, self.place_attack_bids(source, target, g)),
                 }
             }
         }
@@ -223,7 +221,7 @@ impl Nebula {
         for target in targets {
             if let Some(bvec) = bids.get_mut(&target.id) {
                 bvec.sort_by_key(|b| OrderedFloat(b.time));
-                self.take_bids(target.ships, bvec, &mut source_limits);
+                self.take_bids(target.ships, bvec, &mut source_limits, g);
             }
         }
     }
