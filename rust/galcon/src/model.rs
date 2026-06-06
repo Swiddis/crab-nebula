@@ -130,6 +130,19 @@ impl Galaxy {
             panic!("requested aligned ships for nonexistent entity")
         }
     }
+    /// map each planet to all fleets that are approaching the planet
+    pub fn ingress_map<'a>(&'a self) -> HashMap<usize, Vec<&'a Fleet>> {
+        let mut map: HashMap<usize, Vec<&Fleet>> = HashMap::new();
+
+        for fleet in self.fleets.values() {
+            match map.get_mut(&fleet.target) {
+                Some(ingress) => ingress.push(fleet),
+                None => _ = map.insert(fleet.target, vec![fleet]),
+            }
+        }
+
+        map
+    }
 }
 
 impl Default for Galaxy {

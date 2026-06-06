@@ -64,25 +64,11 @@ impl Nebula {
         self.t += t;
     }
 
-    /// map each planet to all fleets that are approaching the planet
-    fn ingress_map<'a>(&self, g: &'a Galaxy) -> HashMap<usize, Vec<&'a Fleet>> {
-        let mut map: HashMap<usize, Vec<&Fleet>> = HashMap::new();
-
-        for fleet in g.fleets.values() {
-            match map.get_mut(&fleet.target) {
-                Some(ingress) => ingress.push(fleet),
-                None => _ = map.insert(fleet.target, vec![fleet]),
-            }
-        }
-
-        map
-    }
-
     /// Get a list of potential target planets with ships adjusted to how many ships are necessary to satisfy the target,
     /// accounting for all active fleet ingress and retention.
     /// Doesn't account for production over time for enemy planets.
     fn get_ingress_balanced_targets(&self, g: &Galaxy) -> Vec<Planet> {
-        let ingress = self.ingress_map(g);
+        let ingress = g.ingress_map();
         let mut ibt: Vec<Planet> = g.planets.values().cloned().collect();
         for planet in ibt.iter_mut() {
             planet.ships = -(g.aligned_ships(planet.id) - RETAIN_PROP * planet.production);
