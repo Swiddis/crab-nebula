@@ -156,7 +156,8 @@ async def make_match(
             select(Player)
             .where(Player.model_version == model_version)
             .where(Player.id != paired_player.id)
-            .where(func.abs(Player.rating - paired_player.rating) < 50)
+            .order_by(func.abs(Player.rating - paired_player.rating))
+            .limit(16)
         )
         result = await db.execute(select_opponent)
         maybe_opponents = list(result.scalars().all())
@@ -186,22 +187,22 @@ async def make_match(
                 select(Player)
                 .where(Player.model_version == model_version)
                 .order_by(func.abs(Player.rating - opp.rating))
-                .limit(32)
+                .limit(16)
             )
         else:
             select_match_players = (
                 select(Player)
                 .where(Player.model_version == model_version)
                 .order_by(Player.rd.desc(), Player.rating.desc())
-                .limit(32)
+                .limit(16)
             )
         result = await db.execute(select_match_players)
         maybe_players = list(result.scalars().all())
-        if opp is not None:
-            thresh = 2 * abs(maybe_players[0].rating - opp.rating)
-            maybe_players = [
-                p for p in maybe_players if abs(p.rating - opp.rating) < 2 * thresh
-            ]
+        # if opp is not None:
+        #     thresh = 2 * abs(maybe_players[0].rating - opp.rating)
+        #     maybe_players = [
+        #         p for p in maybe_players if abs(p.rating - opp.rating) < 2 * thresh
+        #     ]
         player = random.choice(maybe_players)
         paired_match.modify_time = datetime.now()
         paired_match.player1 = player.id
