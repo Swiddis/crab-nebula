@@ -10,7 +10,7 @@ pub trait Engine {
     fn pop_action(&mut self) -> Option<ClientMessage>;
 }
 
-fn start_input_thread(server_tx: Sender<ServerMessage>) -> JoinHandle<()> {
+pub fn start_input_thread(server_tx: Sender<ServerMessage>) -> JoinHandle<()> {
     thread::spawn(move || {
         let stdin = io::stdin();
 
@@ -28,7 +28,7 @@ fn start_input_thread(server_tx: Sender<ServerMessage>) -> JoinHandle<()> {
     })
 }
 
-fn start_output_thread(client_rx: Receiver<ClientMessage>) -> JoinHandle<()> {
+pub fn start_output_thread(client_rx: Receiver<ClientMessage>) -> JoinHandle<()> {
     thread::spawn(move || {
         let stdout = io::stdout();
         let mut out = BufWriter::new(stdout.lock());
