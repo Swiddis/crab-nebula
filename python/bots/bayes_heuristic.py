@@ -108,6 +108,9 @@ def save_result(result_line: list[str], galaxy: ge.Galaxy):
     global player
     global state_hash
 
+    if player == 0:
+        return
+
     duration, winner = float(result_line[2]), int(result_line[4])
 
     our_score, their_score, neutral_score = 0, 0, 0
@@ -172,10 +175,12 @@ def init_weights(galaxy: ge.Galaxy, opponent: str):
         h.update(bytes(str(p), encoding="utf-8"))
     state_hash = h.hexdigest()
 
-    res = requests.post(
-        f"http://localhost:8000/match/{state_hash}?model_version=1&opponent={opponent}"
-    ).json()
-    player = res["player"]
+    # res = requests.post(
+    #     f"http://localhost:8000/match/{state_hash}?model_version=1&opponent={opponent}"
+    # ).json()
+    res = requests.get("http://localhost:8000/top?model_version=1").json()
+    # player = res["player"]
+    player = 0
     weights = res["model"]["weights"]
     print(f"starting round as player {player}", file=sys.stderr)
 

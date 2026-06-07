@@ -50,7 +50,7 @@ class Player(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     model_version: int = Field(index=True)
     name: str = Field(index=True, unique=True)
-    rating: int
+    rating: int = Field()
     rd: int
     vol: float
     model: dict = Field(sa_type=JSONB)
@@ -214,6 +214,18 @@ async def make_match(
             "player": 1,
             "model": player.model,
         }
+
+
+@app.get("/top")
+async def top(model_version: int, db: AsyncSession = Depends(get_db)):
+    top_player = await db.execute(
+        select(Player)
+        .where(Player.model_version == model_version)
+        .order_by(Player.rating.desc())
+        .limit(1)
+    )
+    topp = top_player.scalars().one()
+    return {"model": topp.model}
 
 
 async def rate_match(db: AsyncSession, m: MatchRecord) -> bool:
